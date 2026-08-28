@@ -10,6 +10,7 @@ import CloudKit
 import Network
 import Observation
 import os.log
+import Security
 
 /// Main manager for CloudKit sync operations
 @MainActor
@@ -50,11 +51,25 @@ final class CloudKitSyncManager {
 
     // MARK: - CloudKit Components
 
-    /// CloudKit container
-    private let container: CKContainer
+    /// CloudKit container, or nil when this build cannot have one.
+    ///
+    /// Implicitly unwrapped rather than plainly optional so the ~100 uses
+    /// below read unchanged: nil is not an ordinary state to handle at each
+    /// one, it is a whole-build condition that keeps `isSyncEnabled` false,
+    /// and every path that touches the container is already behind that flag
+    /// or behind an explicit guard added for the few that were not.
+    ///
+    /// Nil only in a build signed without
+    /// `com.apple.developer.icloud-container-identifiers`, which local
+    /// development builds cannot carry: the kernel SIGKILLs an ad-hoc-signed
+    /// process that claims it, and `CKContainer.init(identifier:)` traps
+    /// rather than failing when it is absent, so the entitlement has to be
+    /// probed before the container is ever constructed. A provisioned build
+    /// has it and behaves exactly as before. See `docs/macos-local-dev.md`.
+    private let container: CKContainer!
 
     /// Private database
-    private let database: CKDatabase
+    private let database: CKDatabase!
 
     /// Offline queue for pending changes
     private let offlineQueue = CloudKitOfflineQueue()
@@ -97,9 +112,39 @@ final class CloudKitSyncManager {
 
     // MARK: - Initialization
 
+    /// Whether this process actually carries the iCloud container entitlement.
+    /// `CKContainer.init(identifier:)` traps rather than failing when it does
+    /// not, so it has to be asked before the container is ever constructed.
+    private static var hasICloudContainerEntitlement: Bool {
+        // `SecTask` is not exposed by the iOS SDK, and there is nothing for it
+        // to answer there in any case: an iOS build is either simulator-run
+        // (entitlements unenforced) or provisioned with a profile that really
+        // does carry the container. Only a Mac Catalyst build can be ad-hoc
+        // signed on a machine that cannot provision one.
+        #if targetEnvironment(macCatalyst)
+        guard let task = SecTaskCreateFromSelf(nil) else { return false }
+        let value = SecTaskCopyValueForEntitlement(
+            task, "com.apple.developer.icloud-container-identifiers" as CFString, nil
+        )
+        guard let identifiers = value as? [String] else { return false }
+        return !identifiers.isEmpty
+        #else
+        return true
+        #endif
+    }
+
     private init() {
-        self.container = CKContainer(identifier: "iCloud.rootshell")
-        self.database = container.privateCloudDatabase
+        if Self.hasICloudContainerEntitlement {
+            self.container = CKContainer(identifier: "iCloud.rootshell")
+            self.database = container.privateCloudDatabase
+        } else {
+            // See `container`. Sync stays off: every path that dereferences
+            // either of these is behind `isSyncEnabled`, which only
+            // `setEnabled` sets and which now refuses without a container.
+            Self.logger.error("No iCloud container entitlement; CloudKit sync disabled for this build.")
+            self.container = nil
+            self.database = nil
+        }
 
         // Load settings
         loadSettings()
@@ -405,6 +450,10 @@ final class CloudKitSyncManager {
     /// Revalidate subscriptions on app launch (ensures correct subscription type is registered)
     /// Call this from app startup when sync is already enabled
     func revalidateSubscriptionsIfNeeded() async {
+        // Unreachable without a container; see `container`. These few entry
+        // points are called unconditionally at launch rather than behind
+        // `isSyncEnabled`, so they need the guard the others get for free.
+        guard container != nil else { return }
         guard isSyncEnabled else {
             Self.logger.debug("Subscription revalidation skipped: sync not enabled")
             return
@@ -602,6 +651,14 @@ final class CloudKitSyncManager {
 
     /// Enable or disable sync
     func setEnabled(_ enabled: Bool) async throws {
+        // No container means this build was signed without the iCloud
+        // entitlement (see `container`), so sync cannot be turned on at
+        // all -- report it as an unavailable account rather than
+        // dereferencing nil below.
+        guard container != nil else {
+            syncState = .error(.accountNotAvailable)
+            throw CloudKitSyncError.accountNotAvailable
+        }
         guard enabled != isSyncEnabled else { return }
 
         if enabled {
@@ -697,6 +754,10 @@ final class CloudKitSyncManager {
 
     /// Trigger a manual sync
     func syncNow() async throws {
+        // Unreachable without a container; see `container`. These few entry
+        // points are called unconditionally at launch rather than behind
+        // `isSyncEnabled`, so they need the guard the others get for free.
+        guard container != nil else { return }
         guard isSyncEnabled else { return }
         guard syncState == .idle || syncState.hasError else { return }
 
@@ -705,6 +766,10 @@ final class CloudKitSyncManager {
 
     /// Log diagnostic information for debugging sync issues
     func logDiagnostics() async {
+        // Unreachable without a container; see `container`. These few entry
+        // points are called unconditionally at launch rather than behind
+        // `isSyncEnabled`, so they need the guard the others get for free.
+        guard container != nil else { return }
         Self.logger.info("=== CloudKit Sync Diagnostics ===")
         Self.logger.info("Sync enabled: \(self.isSyncEnabled)")
         Self.logger.info("History sync enabled: \(self.isHistorySyncEnabled)")
@@ -761,6 +826,10 @@ final class CloudKitSyncManager {
 
     /// Handle a remote notification (called from AppDelegate)
     func handleRemoteNotification() async {
+        // Unreachable without a container; see `container`. These few entry
+        // points are called unconditionally at launch rather than behind
+        // `isSyncEnabled`, so they need the guard the others get for free.
+        guard container != nil else { return }
         guard isSyncEnabled else {
             Self.logger.debug("Remote notification ignored: sync not enabled")
             return

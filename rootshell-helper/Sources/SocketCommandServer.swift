@@ -10,8 +10,47 @@ import Foundation
 import Security
 
 private enum HelperPeerTrust {
-    private static let appRequirement =
-        "identifier \"com.kk2.rootshell\" and anchor apple generic and certificate leaf[subject.OU] = \"D97ZME3ET2\""
+    private static let appIdentifier = "com.kk2.rootshell"
+
+    /// The team this helper was itself signed by, or nil when it carries no
+    /// team -- which on Apple silicon means an ad-hoc signature.
+    ///
+    /// Read from our OWN signature rather than hardcoded so the requirement
+    /// below is always anchored to whoever built this copy. A release build
+    /// signed by the upstream team keeps demanding exactly that team, so this
+    /// is not a relaxation of the shipping check; it only has anything
+    /// different to say in a build that was not team-signed in the first
+    /// place.
+    private static let ownTeamIdentifier: String? = {
+        var me: SecCode?
+        guard SecCodeCopySelf(SecCSFlags(), &me) == errSecSuccess, let me else { return nil }
+        var info: CFDictionary?
+        guard SecCodeCopySigningInformation(
+            unsafeBitCast(me, to: SecStaticCode.self), SecCSFlags(rawValue: kSecCSSigningInformation), &info
+        ) == errSecSuccess,
+            let dict = info as? [String: Any] else { return nil }
+        return dict[kSecCodeInfoTeamIdentifier as String] as? String
+    }()
+
+    /// Requirement a connecting peer must satisfy.
+    ///
+    /// Team-signed helper: the peer must be the app, signed by the SAME team
+    /// under Apple's anchor -- the original check, unchanged.
+    ///
+    /// Ad-hoc helper (local development builds -- a free Apple ID cannot
+    /// provision this app's entitlements, so `scripts/build-macos-local.sh`
+    /// ad-hoc signs instead; see `docs/macos-local-dev.md`): there is no
+    /// certificate to pin, so the peer is held to the app's identifier alone.
+    /// That is genuinely weaker -- any ad-hoc binary can claim an identifier
+    /// -- and it is deliberately unreachable unless this helper is itself
+    /// ad-hoc, i.e. is a local build talking to a local build.
+    private static let appRequirement: String = {
+        guard let team = ownTeamIdentifier else {
+            return "identifier \"\(appIdentifier)\""
+        }
+        return "identifier \"\(appIdentifier)\" and anchor apple generic "
+            + "and certificate leaf[subject.OU] = \"\(team)\""
+    }()
 
     static func isAppClientTrusted(fd: Int32) -> Bool {
         var token = audit_token_t()
