@@ -468,7 +468,7 @@ class CursorManager {
             .replacingOccurrences(of: "{{COLOR_B}}", with: colorBStr)
 
         // Write to Documents/.ghostty/shaders/
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = ForkUITestConfiguration.documentsDirectoryURL
         let shadersDir = documentsURL
             .appendingPathComponent(".ghostty", isDirectory: true)
             .appendingPathComponent("shaders", isDirectory: true)

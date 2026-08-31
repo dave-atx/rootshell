@@ -785,6 +785,12 @@ final class ConnectionProfileManager {
 
     private func syncVPNSharedProfiles() {
         #if !CHINA_BUILD
+        // The disposable fork UI-test host intentionally has no VPN
+        // entitlement or app-group container. Avoid even probing the
+        // production shared container while the profile manager is being
+        // initialized for SSH/terminal tests; normal builds retain the mirror
+        // used by the VPN extension and widgets.
+        guard !ForkUITestConfiguration.isEnabled else { return }
         let sharedProfiles = profiles
             .filter(\.isVPNCapable)
             .map(makeVPNSharedProfileSnapshot)

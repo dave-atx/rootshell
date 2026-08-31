@@ -348,7 +348,7 @@ final class KeybindManager: ObservableObject {
 
     /// Local destination for imported config files
     private var importedKeybindsURL: URL {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = ForkUITestConfiguration.documentsDirectoryURL
         return documentsURL
             .appendingPathComponent(".ghostty", isDirectory: true)
             .appendingPathComponent("imported_keybinds.conf")
@@ -532,12 +532,19 @@ final class KeybindManager: ObservableObject {
 
     /// Write terminal action keybinds to ghostty config file
     func syncToGhosttyConfig() {
-        guard let configDir = FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first?.appendingPathComponent("ghostty") else {
-            Self.logger.error("Failed to get config directory")
-            return
+        let configDir: URL
+        if ForkUITestConfiguration.isEnabled {
+            configDir = ForkUITestConfiguration.processHomeDirectoryURL
+                .appendingPathComponent(".config/ghostty", isDirectory: true)
+        } else {
+            guard let appSupport = FileManager.default.urls(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask
+            ).first else {
+                Self.logger.error("Failed to get config directory")
+                return
+            }
+            configDir = appSupport.appendingPathComponent("ghostty")
         }
 
         let keybindsFile = configDir.appendingPathComponent("keybinds")

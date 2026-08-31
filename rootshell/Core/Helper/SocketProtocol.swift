@@ -239,8 +239,14 @@ nonisolated struct AppGroupHelper {
     /// Set from --app-group argv so the spawning app stays authoritative.
     static var overrideGroupIdentifier: String?
 
+    /// Fork-only UI tests use a private temporary socket directory instead of
+    /// opening the production app's Group Container. Ordinary launches leave
+    /// this nil and retain the provisioned app-group behavior above.
+    static var overrideContainerURL: URL?
+
     static var containerURL: URL? {
-        FileManager.default.containerURL(
+        if let overrideContainerURL { return overrideContainerURL }
+        return FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: overrideGroupIdentifier ?? groupIdentifier
         )
     }

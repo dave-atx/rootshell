@@ -86,7 +86,7 @@ class ShaderManager {
 
     /// Returns the Documents path for a custom shader
     func documentsPathForCustomShader(_ filename: String) -> URL {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = ForkUITestConfiguration.documentsDirectoryURL
         return documentsURL
             .appendingPathComponent(".ghostty", isDirectory: true)
             .appendingPathComponent("shaders", isDirectory: true)
@@ -95,7 +95,7 @@ class ShaderManager {
 
     /// Returns the custom shaders directory, creating it if needed
     private var customShadersDirectory: URL {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = ForkUITestConfiguration.documentsDirectoryURL
         let shadersDir = documentsURL
             .appendingPathComponent(".ghostty", isDirectory: true)
             .appendingPathComponent("shaders", isDirectory: true)

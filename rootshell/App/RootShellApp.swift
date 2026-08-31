@@ -50,6 +50,16 @@ struct RootShellApp: App {
     @MainActor private static var didRunAppStartupTasks = false
 
     init() {
+        // Activate fork-only UI-test isolation before any singleton below can
+        // touch production-scoped preferences or Group Container data.
+        ForkUITestConfiguration.activateIfRequested()
+        if ForkUITestConfiguration.isEnabled {
+            // Ghostty still needs bundled fonts for a real terminal surface,
+            // but none of the account/background/application services do.
+            _ = FontManager.shared
+            return
+        }
+
         // AppIconManager is instantiated OUTSIDE the ProtectedDataGuard because
         // on Mac Catalyst the dock icon is a runtime-only assignment that must
         // be reapplied every launch. Its internal UserDefaults reads are
@@ -98,7 +108,14 @@ struct RootShellApp: App {
     var body: some Scene {
         WindowGroup(id: "main-terminal") {
             MainView()
-                .overlay { MCPApprovalOverlay() }
+                .overlay {
+                    // Constructing this overlay starts MCPServer on appear.
+                    // The fork UI tests exercise terminal/SSH only and must
+                    // not load the user's MCP configuration or credentials.
+                    if !ForkUITestConfiguration.isEnabled {
+                        MCPApprovalOverlay()
+                    }
+                }
                 .environmentObject(ghosttyApp)
                 .preferredColorScheme(appearanceManager.colorScheme)
                 .statusBarStyleForTerminalTheme()
@@ -106,6 +123,10 @@ struct RootShellApp: App {
                 .alwaysOnDisplay()
                 .task {
                     guard ProtectedDataGuard.isAvailable else { return }
+                    // Fork-only zmx UI tests own their fixture and should not
+                    // start unrelated CloudKit, MCP, tunnel, or account
+                    // background work in the test process.
+                    guard !ForkUITestConfiguration.isEnabled else { return }
 
                     // App-level startup work: run ONCE per launch, not on every
                     // window. SwiftUI runs this `.task` per window; re-running

@@ -65,7 +65,7 @@ final class ScrollbackPersistenceManager {
     // MARK: - Storage
 
     private var scrollbackDirectory: URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let docs = ForkUITestConfiguration.documentsDirectoryURL
         return docs.appendingPathComponent(".ghostty/scrollback", isDirectory: true)
     }
 
@@ -375,7 +375,7 @@ final class ScrollbackPersistenceManager {
         }
 
         // Write to disk
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let docs = ForkUITestConfiguration.documentsDirectoryURL
         let scrollbackDir = docs.appendingPathComponent(".ghostty/scrollback", isDirectory: true)
         let fileURL = scrollbackDir.appendingPathComponent("\(ref.uuid.uuidString).ansi.enc")
         let legacyURL = scrollbackDir.appendingPathComponent("\(ref.uuid.uuidString).ansi")

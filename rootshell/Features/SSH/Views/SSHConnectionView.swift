@@ -9,7 +9,12 @@ struct SSHConnectionView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.sheetThemeColors) private var sheetThemeColors
-    @ObservedObject private var sshKeyManager = SSHKeyManager.shared
+    // The fork suite always uses explicit no-auth SSH. Avoid creating the
+    // persisted-key manager (which scans the production shared keychain) just
+    // to render an unused key picker.
+    @ObservedObject private var sshKeyManager = ForkUITestConfiguration.isEnabled
+        ? SSHKeyManager.forkUITestEmpty
+        : SSHKeyManager.shared
     @ObservedObject private var historyManager = SSHConnectionHistoryManager.shared
     @ObservedObject private var clusterManager = KubernetesClusterManager.shared
     @ObservedObject private var suggestionProvider = QuickConnectSuggestionProvider.shared
@@ -567,6 +572,7 @@ struct SSHConnectionView: View {
                     connect()
                 }
                 .disabled(!isFormValid)
+                .forkUITestIdentifier("ssh-connect")
             }
         }
     }
@@ -698,6 +704,7 @@ struct SSHConnectionView: View {
                     .autocapitalization(.none)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
+                    .forkUITestIdentifier("ssh-host")
                 
                 HStack {
                     Text("Port")
@@ -706,6 +713,7 @@ struct SSHConnectionView: View {
                         .keyboardType(.numberPad)
                         .multilineTextAlignment(.trailing)
                         .frame(maxWidth: 100)
+                        .forkUITestIdentifier("ssh-port")
                 }
             }
             .themedRow()
@@ -737,13 +745,17 @@ struct SSHConnectionView: View {
                 TextField("Username", text: $username)
                     .autocapitalization(.none)
                     .autocorrectionDisabled()
+                    .forkUITestIdentifier("ssh-username")
                 
                 Picker("Method", selection: targetMethodSelection) {
                     ForEach(authMethodPickerCases, id: \.self) { type in
-                        Text(type.displayName).tag(type)
+                        Text(type.displayName)
+                            .tag(type)
+                            .forkUITestIdentifier("ssh-auth-\(type.displayName.lowercased())")
                     }
                 }
                 .pickerStyle(.segmented)
+                .forkUITestIdentifier("ssh-auth-method")
 
                 if authMethod == .password || authMethod == .keyboardInteractive {
                     Toggle("Keyboard-Interactive (2FA / OTP)", isOn: targetUsesKeyboardInteractive)

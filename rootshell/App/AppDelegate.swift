@@ -23,6 +23,19 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }()
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // Fork-only zmx UI tests opt in through an explicit Debug launch
+        // argument. Install volatile overrides before any scene or settings
+        // object can read UserDefaults; this never changes the user's store.
+        ForkUITestConfiguration.activateIfRequested()
+
+        // The disposable Catalyst test host needs only its volatile defaults
+        // and a real terminal scene. Keep diagnostic, lifecycle, account, and
+        // workspace-related startup from opening production user state.
+        if ForkUITestConfiguration.isEnabled {
+            UserDefaultsMigration.registerVolatileDefaults()
+            return true
+        }
+
         // Capture any wedge tombstone from the previous run BEFORE any
         // checkpoints from this session can grow the file past the rotation
         // size. The scanner only reads ~4KB so it's safe to call here.
@@ -100,6 +113,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // the app process before protected data is available, causing UserDefaults to return
         // empty values and permanently overwrite real settings.
         ProtectedDataGuard.whenAvailable {
+            guard !ForkUITestConfiguration.isEnabled else { return }
             UserDefaultsBackup.detectAndRecover()
             UserDefaultsMigration.migrateIfNeeded()
             RootshellShortcuts.updateAppShortcutParameters()

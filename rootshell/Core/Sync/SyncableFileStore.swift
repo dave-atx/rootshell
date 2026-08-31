@@ -63,7 +63,7 @@ struct SyncableFileStore<T: SyncableRecord> {
     init(storeName: String) {
         self.storeName = storeName
 
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = ForkUITestConfiguration.documentsDirectoryURL
         self.directoryURL = documentsURL
             .appendingPathComponent(".ghostty", isDirectory: true)
             .appendingPathComponent("sync", isDirectory: true)

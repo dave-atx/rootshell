@@ -257,6 +257,13 @@
 			remoteGlobalIDString = 473118BE2FFC2B1500FB3C83;
 			remoteInfo = rootshellvpn;
 		};
+		FCA001012FCA0000A11C0001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 47D8B23A2ECAAE7F00CA99EC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F8E8E0BB93A62D2E0F4FCE1F;
+			remoteInfo = "rootshell-standalone";
+		};
 		473119062FFC2B4D00FB3C83 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 47D8B23A2ECAAE7F00CA99EC /* Project object */;
@@ -484,6 +491,7 @@
 		473118BF2FFC2B1500FB3C83 /* rootshellvpn.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = rootshellvpn.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		473118CB2FFC2B1600FB3C83 /* rootshellvpnTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = rootshellvpnTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		473118D52FFC2B1600FB3C83 /* rootshellvpnUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = rootshellvpnUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		FCA001012FCA0000A11C0002 /* rootshellStandaloneUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = rootshellStandaloneUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		473118FC2FFC2B4D00FB3C83 /* com.kk2.rootshellvpn.tunnel.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = com.kk2.rootshellvpn.tunnel.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
 		473118FD2FFC2B4D00FB3C83 /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
 		474646252F3D90FC00AD763B /* helix-runtime */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "helix-runtime"; path = "Resources/helix-runtime"; sourceTree = "<group>"; };
@@ -706,6 +714,11 @@
 			path = rootshellvpnUITests;
 			sourceTree = "<group>";
 		};
+		FCA001012FCA0000A11C0003 /* rootshellStandaloneUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = rootshellStandaloneUITests;
+			sourceTree = "<group>";
+		};
 		473118FF2FFC2B4D00FB3C83 /* tunnel */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -824,6 +837,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		473118D22FFC2B1600FB3C83 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FCA001012FCA0000A11C0005 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -1035,6 +1055,7 @@
 				473118C02FFC2B1500FB3C83 /* rootshellvpn */,
 				473118CE2FFC2B1600FB3C83 /* rootshellvpnTests */,
 				473118D82FFC2B1700FB3C83 /* rootshellvpnUITests */,
+				FCA001012FCA0000A11C0003 /* rootshellStandaloneUITests */,
 				473118FF2FFC2B4D00FB3C83 /* tunnel */,
 				47D8B26C2ECABBD200CA99EC /* Frameworks */,
 				47D8B2432ECAAE7F00CA99EC /* Products */,
@@ -1059,6 +1080,7 @@
 				473118BF2FFC2B1500FB3C83 /* rootshellvpn.app */,
 				473118CB2FFC2B1600FB3C83 /* rootshellvpnTests.xctest */,
 				473118D52FFC2B1600FB3C83 /* rootshellvpnUITests.xctest */,
+				FCA001012FCA0000A11C0002 /* rootshellStandaloneUITests.xctest */,
 				473118FC2FFC2B4D00FB3C83 /* com.kk2.rootshellvpn.tunnel.systemextension */,
 				DD1249A5776E91521A4BEA8A /* rootshell.app */,
 			);
@@ -1149,6 +1171,27 @@
 			name = rootshellvpnUITests;
 			productName = rootshellvpnUITests;
 			productReference = 473118D52FFC2B1600FB3C83 /* rootshellvpnUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		FCA001002FCA0000A11C0001 /* rootshellStandaloneUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FCA001012FCA0000A11C0009 /* Build configuration list for PBXNativeTarget "rootshellStandaloneUITests" */;
+			buildPhases = (
+				FCA001012FCA0000A11C0004 /* Sources */,
+				FCA001012FCA0000A11C0005 /* Frameworks */,
+				FCA001012FCA0000A11C0006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				FCA001012FCA0000A11C0008 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				FCA001012FCA0000A11C0003 /* rootshellStandaloneUITests */,
+			);
+			name = rootshellStandaloneUITests;
+			productName = rootshellStandaloneUITests;
+			productReference = FCA001012FCA0000A11C0002 /* rootshellStandaloneUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 		473118FB2FFC2B4D00FB3C83 /* tunnel */ = {
@@ -1600,6 +1643,7 @@
 				473118BE2FFC2B1500FB3C83 /* rootshellvpn */,
 				473118CA2FFC2B1600FB3C83 /* rootshellvpnTests */,
 				473118D42FFC2B1600FB3C83 /* rootshellvpnUITests */,
+				FCA001002FCA0000A11C0001 /* rootshellStandaloneUITests */,
 				473118FB2FFC2B4D00FB3C83 /* tunnel */,
 				F8E8E0BB93A62D2E0F4FCE1F /* rootshell-standalone */,
 			);
@@ -1623,6 +1667,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		473118D32FFC2B1600FB3C83 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FCA001012FCA0000A11C0006 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -1965,6 +2016,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FCA001012FCA0000A11C0004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		473118F82FFC2B4D00FB3C83 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -2063,6 +2121,11 @@
 			isa = PBXTargetDependency;
 			target = 473118BE2FFC2B1500FB3C83 /* rootshellvpn */;
 			targetProxy = 473118D62FFC2B1700FB3C83 /* PBXContainerItemProxy */;
+		};
+		FCA001012FCA0000A11C0008 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F8E8E0BB93A62D2E0F4FCE1F /* rootshell-standalone */;
+			targetProxy = FCA001012FCA0000A11C0001 /* PBXContainerItemProxy */;
 		};
 		473119072FFC2B4D00FB3C83 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -6147,6 +6210,31 @@
 			};
 			name = ReleaseChina;
 		};
+		FCA001012FCA0000A11C0007 /* DebugStandalone */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Configuration/LocalUITests.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = D97ZME3ET2;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kk2.rootshell.localuitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = macosx;
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = "rootshell-standalone";
+			};
+			name = DebugStandalone;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -6194,6 +6282,14 @@
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
+		};
+		FCA001012FCA0000A11C0009 /* Build configuration list for PBXNativeTarget "rootshellStandaloneUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FCA001012FCA0000A11C0007 /* DebugStandalone */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = DebugStandalone;
 		};
 		4731190A2FFC2B4D00FB3C83 /* Build configuration list for PBXNativeTarget "tunnel" */ = {
 			isa = XCConfigurationList;

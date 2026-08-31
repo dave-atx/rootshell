@@ -542,6 +542,16 @@ extension MainView {
     /// Resign first responder when sheets are presented to prevent keyboard from appearing
     /// This fixes the issue where the virtual keyboard appears in settings sheets
     func resignFirstResponderForSheetPresentation() {
+        // The fork-only XCTest host drives regular-width Catalyst overlays via
+        // accessibility. It neither has nor needs a software keyboard. More
+        // importantly, resigning a UIKit terminal while SwiftUI is mounting
+        // the connection sidebar re-enters the responder graph on current
+        // Catalyst: UIKit asks the hosting view for its next responder, which
+        // forces construction of the sidebar being presented. Keep that test
+        // harness out of the production focus pipeline so UI tests can open
+        // the real connection UI without this framework-level deadlock.
+        guard !ForkUITestConfiguration.isEnabled else { return }
+
         // Per-sheet onChange handlers can run before the isAnySheetPresented
         // handler; run the full terminal gate here first (idempotent) so both
         // the keyboard-preservation latch and the per-terminal toolbar-reserve
@@ -578,6 +588,13 @@ extension MainView {
     /// when the gate drops. Scoped to this scene's `terminals`, so multi-window
     /// stays correct. Driven by the single `onChange(of: isAnySheetPresented)`.
     func setOverlayOwnsKeyboardForAllTerminals(_ owns: Bool) {
+        // See `resignFirstResponderForSheetPresentation()`: the disposable
+        // XCUITest host deliberately does not exercise the production
+        // responder-ownership machinery. Updating it while SwiftUI mounts an
+        // accessibility-driven connection sidebar can synchronously re-enter
+        // the view graph through `resignFirstResponder()`.
+        guard !ForkUITestConfiguration.isEnabled else { return }
+
         // Freeze the reported software-keyboard layout before the resign below
         // hides the keyboard, so terminal bounds hold steady across the overlay
         // round trip (zero PTY resizes when nothing changed). Owner-scoped per

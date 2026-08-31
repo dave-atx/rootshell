@@ -37,7 +37,12 @@ final class ResumeDebugLogger: Sendable {
     private let dateFormatter: DateFormatter
 
     private init() {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        // Fork UI tests must not resolve the Catalyst Documents directory:
+        // doing so can trigger a macOS folder-privacy prompt before the test
+        // has any chance to interact with the app. Their diagnostics, when
+        // enabled, are disposable alongside the test shell state.
+        let documentsURL = ForkUITestConfiguration.sterileHomeDirectory
+            ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let ghosttyDir = documentsURL.appendingPathComponent(".ghostty", isDirectory: true)
         self.logFileURL = ghosttyDir.appendingPathComponent("resume_debug.log")
         self.rotatedLogFileURL = ghosttyDir.appendingPathComponent("resume_debug.1.log")

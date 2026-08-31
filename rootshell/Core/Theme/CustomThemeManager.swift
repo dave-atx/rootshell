@@ -29,9 +29,7 @@ class CustomThemeManager: ObservableObject {
 
     /// JSON metadata file: Documents/.ghostty/custom_themes.json
     private var metadataFileURL: URL? {
-        guard let docs = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            return nil
-        }
+        let docs = ForkUITestConfiguration.documentsDirectoryURL
         let dir = docs.appendingPathComponent(".ghostty")
         try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("custom_themes.json")
@@ -39,6 +37,12 @@ class CustomThemeManager: ObservableObject {
 
     /// Ghostty theme files directory: Application Support/ghostty/themes/
     private var ghosttyThemesDirectory: URL? {
+        if ForkUITestConfiguration.isEnabled {
+            let dir = ForkUITestConfiguration.processHomeDirectoryURL
+                .appendingPathComponent(".config/ghostty/themes", isDirectory: true)
+            try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+            return dir
+        }
         guard let appSupport = fileManager.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask

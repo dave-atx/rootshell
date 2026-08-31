@@ -220,12 +220,24 @@ extension Ghostty {
 
         /// Get the config directory path (~/.config/ghostty on iOS)
         private static var configDirectory: URL? {
-            // On iOS, use Application Support directory
-            guard let appSupport = FileManager.default.urls(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask
-            ).first else {
-                return nil
+            // Fork UI tests must not resolve the real user's Application
+            // Support directory. `Ghostty.initialize()` redirects
+            // XDG_CONFIG_HOME, but this Swift-side writer previously bypassed
+            // that environment variable and wrote to
+            // ~/Library/Application Support/ghostty/config directly.
+            let appSupport: URL
+            if ForkUITestConfiguration.isEnabled {
+                appSupport = ForkUITestConfiguration.processHomeDirectoryURL
+                    .appendingPathComponent(".config", isDirectory: true)
+            } else {
+                // On iOS, use Application Support directory.
+                guard let standardAppSupport = FileManager.default.urls(
+                    for: .applicationSupportDirectory,
+                    in: .userDomainMask
+                ).first else {
+                    return nil
+                }
+                appSupport = standardAppSupport
             }
 
             let ghosttyDir = appSupport.appendingPathComponent("ghostty")
@@ -299,7 +311,7 @@ extension Ghostty {
             configLines.append("command = \(shellCommand)")
 
             // Set initial working directory to home
-            let homeDir = NSHomeDirectory()
+            let homeDir = ForkUITestConfiguration.processHomeDirectoryURL.path
             configLines.append("working-directory = \(homeDir)")
 
             logger.info("Catalyst config: command=\"\(shellCommand)\", working-directory=\"\(homeDir)\"")
@@ -469,7 +481,7 @@ extension Ghostty {
             // Mac Catalyst: Spawn shell directly instead of via /usr/bin/login
             #if targetEnvironment(macCatalyst)
             configLines.append("command = \(LocalShellSettings.ghosttyConfigCommand)")
-            let homeDir = NSHomeDirectory()
+            let homeDir = ForkUITestConfiguration.processHomeDirectoryURL.path
             configLines.append("working-directory = \(homeDir)")
             #endif
 

@@ -465,9 +465,9 @@ extension MainView {
         guard !trimmed.isEmpty else { return nil }
         // Match the shell's HOME: the user home on macOS, Documents on iOS.
         #if targetEnvironment(macCatalyst)
-        let home = NSHomeDirectory()
+        let home = ForkUITestConfiguration.processHomeDirectoryURL.path
         #else
-        let home = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].path
+        let home = ForkUITestConfiguration.documentsDirectoryURL.path
         #endif
         if trimmed == "~" { return home }
         if trimmed.hasPrefix("~/") { return home + "/" + String(trimmed.dropFirst(2)) }

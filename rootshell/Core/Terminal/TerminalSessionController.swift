@@ -837,6 +837,10 @@ final class TerminalSessionController {
     }
 
     private func setupReconnection(for session: TerminalSession) {
+        // The fork UI-test fixture owns connection lifetime. Do not install
+        // the normal reconnect state machine, which could race a test's
+        // explicit disconnect/teardown and make readiness nondeterministic.
+        guard !ForkUITestConfiguration.isEnabled else { return }
         reconnectionController.setup(
             for: session,
             currentSession: { [weak self] in self?.session },
@@ -1047,8 +1051,14 @@ final class TerminalSessionController {
                 }
 
                 self.responsePipeline.start(for: session)
-                self.historyRecorder.start(connectionConfig: connectionConfig) { [weak self] in
-                    self?.session
+                // Fork UI tests use a disposable fixture and must not leave a
+                // connection-history entry behind in the developer's profile.
+                // This is guarded by the explicit Debug launch argument and is
+                // inert for every normal product launch.
+                if !ForkUITestConfiguration.isEnabled {
+                    self.historyRecorder.start(connectionConfig: connectionConfig) { [weak self] in
+                        self?.session
+                    }
                 }
             } catch is CancellationError {
                 Ghostty.logger.info("Session start cancelled (tab closing)")

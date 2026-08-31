@@ -56,6 +56,9 @@ class SSHKeyManager: ObservableObject {
     private nonisolated static let logger = Logger(subsystem: "com.rootshell", category: "SSHKeyManager")
 
     static let shared = SSHKeyManager()
+    /// Empty in-memory manager for the fork UI test SSH form. It deliberately
+    /// avoids migrations and SecItem queries; tests select `.none` auth.
+    static let forkUITestEmpty = SSHKeyManager(loadPersistedKeys: false)
 
     private static let keysMetadataKey = "sshKeysMetadata"
     private static let defaultKeyIDsKey = "defaultSSHKeyIDs"
@@ -100,8 +103,9 @@ class SSHKeyManager: ObservableObject {
 
     private let keychainManager: KeychainManager
 
-    private init() {
+    private init(loadPersistedKeys: Bool = true) {
         self.keychainManager = KeychainManager.shared
+        guard loadPersistedKeys else { return }
         migrateMetadataIfNeeded()  // 1. Migrate existing UserDefaults data to keychain
         loadKeys()                  // 2. Load from keychain
         migrateLegacyDefaultKeyID()  // 3. Migrate single default to array format

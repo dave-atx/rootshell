@@ -81,7 +81,11 @@ final class LifecycleDebugLogger: Sendable {
     private let bodyEvaluationCounter = OSAllocatedUnfairLock<Int>(initialState: 0)
 
     private init() {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        // Keep the opt-in fork UI-test process out of the user's Documents
+        // directory. Resolving it on Catalyst can itself invoke TCC and block
+        // unattended tests with a folder-privacy sheet.
+        let documentsURL = ForkUITestConfiguration.sterileHomeDirectory
+            ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let ghosttyDir = documentsURL.appendingPathComponent(".ghostty", isDirectory: true)
         self.logFileURL = ghosttyDir.appendingPathComponent("lifecycle_debug.log")
         self.rotatedLogFileURL = ghosttyDir.appendingPathComponent("lifecycle_debug.1.log")

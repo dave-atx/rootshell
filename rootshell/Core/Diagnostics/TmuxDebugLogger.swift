@@ -87,7 +87,8 @@ final class TmuxDebugLogger: Sendable {
     private let gatewayInbound = OSAllocatedUnfairLock<[Int: GatewayInbound]>(initialState: [:])
 
     private init() {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = ForkUITestConfiguration.sterileHomeDirectory
+            ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let ghosttyDir = documentsURL.appendingPathComponent(".ghostty", isDirectory: true)
         self.logFileURL = ghosttyDir.appendingPathComponent("tmux_debug.log")
         self.rotatedLogFileURL = ghosttyDir.appendingPathComponent("tmux_debug.1.log")

@@ -529,12 +529,11 @@ nonisolated struct AgentDetectionManifest {
     }
 
     private static func loadSide(overrideName: String, embedded: String, label: String) -> ManifestFile? {
-        if let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-            let url = documents.appendingPathComponent(overrideName)
-            if let data = try? Data(contentsOf: url),
-               let file = decodeFile(data, source: "\(label) override") {
-                return file
-            }
+        let documents = ForkUITestConfiguration.documentsDirectoryURL
+        let url = documents.appendingPathComponent(overrideName)
+        if let data = try? Data(contentsOf: url),
+           let file = decodeFile(data, source: "\(label) override") {
+            return file
         }
         guard let data = embedded.data(using: .utf8) else {
             logger.error("embedded \(label, privacy: .public) manifest is not UTF-8; side disabled")

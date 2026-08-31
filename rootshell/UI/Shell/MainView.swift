@@ -342,7 +342,9 @@ struct MainView: View {
     @State var showAIAgentOverlay = false  // For iPhone sheet presentation
     @State var aiAgentSidebarVisibleTabs: Set<UUID> = []  // For sidebar mode on iPad/Catalyst/visionOS
     @State var aiAgentSidebarIsDragging: Bool = false  // Track sidebar resize drag
-    @State var aiAgentSidebarWidth: CGFloat = AICredentialsManager.shared.aiAgentSidebarWidth  // Local state for smooth drag
+    // Avoid the credentials singleton (and its keychain reads) in the
+    // disposable fork UI-test process. The sidebar is never exercised there.
+    @State var aiAgentSidebarWidth: CGFloat = ForkUITestConfiguration.isEnabled ? 400 : AICredentialsManager.shared.aiAgentSidebarWidth  // Local state for smooth drag
     @State var aiAgentSessions: [UUID: AIAgentSession] = [:]
     // Tracks which TerminalView spawned each agent session, so a connection-config
     // change in a sibling split of the same tab doesn't tear down an agent attached

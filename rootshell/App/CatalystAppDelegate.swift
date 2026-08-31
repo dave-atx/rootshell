@@ -417,16 +417,27 @@ class CatalystAppDelegate: AppDelegate {
         // Call super to register for remote notifications (CloudKit push)
         _ = super.application(application, didFinishLaunchingWithOptions: launchOptions)
 
+        // AppDelegate installed the test's essential volatile defaults. Do
+        // not load AppleScript support, NSWorkspace observers, or persisted
+        // window state in the disposable test host.
+        if ForkUITestConfiguration.isEnabled {
+            return true
+        }
+
         // Load Rootshell.sdef so AppleScript commands dispatch from the
         // first AppleEvent (see Features/Automation/AppleScriptCommands).
         _ = NSScriptSuiteRegistry.shared()
 
         #if STANDALONE
-        // Force Sparkle scheduler to start at launch (UpdateManager.shared is lazy)
-        _ = UpdateManager.shared
+        // Fork-only zmx UI tests own one ordinary window. Avoid unrelated
+        // updater/visor startup (and any hidden visor scene) in that process.
+        if !ForkUITestConfiguration.isEnabled {
+            // Force Sparkle scheduler to start at launch (UpdateManager.shared is lazy)
+            _ = UpdateManager.shared
 
-        // Visor: register the global hotkey if the user has it enabled.
-        VisorHotkeyManager.shared.registerIfEnabled()
+            // Visor: register the global hotkey if the user has it enabled.
+            VisorHotkeyManager.shared.registerIfEnabled()
+        }
         #endif
 
         // Mac Catalyst: Use NSWorkspace notification for app activation (Cmd-Tab)

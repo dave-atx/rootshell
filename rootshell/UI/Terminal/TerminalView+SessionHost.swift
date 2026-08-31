@@ -65,6 +65,7 @@ extension Ghostty.TerminalView: TerminalSessionControllerHost {
     }
 
     func sessionDidEnd() {
+        ForkUITestConfiguration.markTerminal(self, state: "disconnected")
         // Cancel connection success timer if session ends prematurely.
         self.sessionController.cancelConnectionSuccessTimer()
 
@@ -94,6 +95,10 @@ extension Ghostty.TerminalView: TerminalSessionControllerHost {
     }
 
     func sessionDidBecomeReady() {
+        ForkUITestConfiguration.markTerminal(
+            self,
+            state: connectionConfig.requiresSSHCallbacks ? "remote-ready" : "ready"
+        )
         // Clear restoration state if we were reconnecting from restore
         if self.restorationState == .connectingFromRestore {
             self.restorationState = .none

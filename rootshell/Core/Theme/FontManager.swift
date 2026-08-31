@@ -327,7 +327,9 @@ class FontManager: ObservableObject {
 
     /// Directory for user-imported font files
     private var customFontsDirectory: URL {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = ForkUITestConfiguration.isEnabled
+            ? ForkUITestConfiguration.documentsDirectoryURL
+            : FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let fontsDir = documentsURL
             .appendingPathComponent(".ghostty", isDirectory: true)
             .appendingPathComponent("fonts", isDirectory: true)

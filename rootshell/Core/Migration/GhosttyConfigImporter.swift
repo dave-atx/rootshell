@@ -50,6 +50,11 @@ final class GhosttyConfigImporter {
     /// generates its runtime config, and importing that back would just be a
     /// circular reflection of the user's current settings.
     static func discoverDefaultConfigs() -> [URL] {
+        // Discovery intentionally probes Ghostty's desktop application data.
+        // The disposable fork UI-test host must never cross that TCC boundary;
+        // migration settings are outside the zmx/SSH test scope.
+        guard !ForkUITestConfiguration.isEnabled else { return [] }
+
         let fm = FileManager.default
         // `homeDirectoryForCurrentUser` is unavailable on Mac Catalyst, but
         // `NSHomeDirectory()` returns the real user home on the non-sandboxed

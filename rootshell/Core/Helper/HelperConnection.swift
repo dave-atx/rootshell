@@ -124,8 +124,10 @@ public class HelperConnection {
                 let (sessionID, socketPath) = try await socketConnection.createShell(
                     rows: rows,
                     cols: cols,
-                    cwd: workingDirectory,
-                    shell: shell,
+                    cwd: ForkUITestConfiguration.sterileHomeDirectory?.path ?? workingDirectory,
+                    // Keep the disposable test shell real and interactive,
+                    // but never source the developer's login/rc files.
+                    shell: ForkUITestConfiguration.isEnabled ? "/bin/zsh -f" : shell,
                     resourcesDir: resourcesDir,
                     enableShellIntegration: enableShellIntegration,
                     sshAuthSock: sshAuthSock,
@@ -340,7 +342,12 @@ public class HelperConnection {
 
         // Build argv array for posix_spawn
         // argv[0] = program name, argv[1..n] = arguments, argv[n+1] = NULL
-        let args = [helperPath, "--app-group", AppGroupHelper.groupIdentifier]
+        let args: [String]
+        if let socketDirectory = AppGroupHelper.overrideContainerURL?.path {
+            args = [helperPath, "--socket-directory", socketDirectory]
+        } else {
+            args = [helperPath, "--app-group", AppGroupHelper.overrideGroupIdentifier ?? AppGroupHelper.groupIdentifier]
+        }
 
         // Convert to C string array
         var cArgs = args.map { strdup($0) }
@@ -353,6 +360,11 @@ public class HelperConnection {
         var envVars: [String: String] = [:]
         if let resourcesDir = Bundle.main.resourceURL?.path {
             envVars["ROOTSHELL_RESOURCES_DIR"] = resourcesDir
+        }
+        if let testHome = ForkUITestConfiguration.sterileHomeDirectory?.path {
+            // The helper deliberately starts with a minimal environment, so
+            // pass the test-home contract explicitly rather than inheriting it.
+            envVars["ROOTSHELL_UI_TEST_HOME"] = testHome
         }
         // Minimal PATH for helper binary execution
         envVars["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
@@ -394,6 +406,7 @@ public class HelperConnection {
         }
 
         helperPID = pid
+        ForkUITestConfiguration.recordLaunchedHelper(pid: pid)
         Ghostty.logger.info("Launched helper (PID: \(pid)) from \(helperPath)")
         return true
     }
@@ -427,6 +440,7 @@ public class HelperConnection {
                 Ghostty.logger.warning("Helper didn't respond to SIGTERM, sending SIGKILL")
                 kill(pid, SIGKILL)
             }
+            ForkUITestConfiguration.clearLaunchedHelper(pid: pid)
             self?.helperPID = 0
         }
     }

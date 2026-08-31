@@ -85,6 +85,17 @@ extension MainView {
     }
 
     func handleOnAppear() {
+        // The fork suite needs one ordinary local terminal and the New
+        // Connection UI, not window restoration, agent discovery, or the
+        // production-state observer graph. Keep the test launch on that
+        // minimal path before any of those services are instantiated.
+        if ForkUITestConfiguration.isEnabled {
+            if terminals.isEmpty {
+                checkHelperAndCreateInitialTab()
+            }
+            return
+        }
+
         updateWindowFocusState()
 
         // Restore the docked sidebar if it was pinned: `tabSidebarPinned`
@@ -275,6 +286,16 @@ extension MainView {
     }
 
     func handleOnDisappear() {
+        if ForkUITestConfiguration.isEnabled {
+            for tab in terminals {
+                for terminal in tab.splitTree.terminalLeaves {
+                    terminal.cleanup(reason: .sceneTeardown)
+                }
+            }
+            terminals.removeAll()
+            return
+        }
+
         #if targetEnvironment(macCatalyst)
         #if STANDALONE
         if windowId == "visor" {
