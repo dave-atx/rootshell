@@ -111,7 +111,22 @@ class EnvironmentBuilder {
         var env: [String: String] = [:]
 
         // Essential user identity from system (not inheritance)
-        if let pw = getpwuid(getuid()) {
+        if let testHome = ProcessInfo.processInfo.environment["ROOTSHELL_UI_TEST_HOME"],
+           (testHome.hasPrefix("/private/tmp/rootshell-zmx-xcui-") ||
+            testHome.hasPrefix("/tmp/rootshell-zmx-xcui-")),
+           FileManager.default.fileExists(atPath: testHome) {
+            // Only the disposable fork helper receives this environment
+            // variable. Keep all shell state (including ssh known_hosts) out
+            // of the real user profile.
+            env["HOME"] = testHome
+            env["ZDOTDIR"] = testHome
+            env["XDG_CONFIG_HOME"] = (testHome as NSString).appendingPathComponent(".config")
+            env["XDG_DATA_HOME"] = (testHome as NSString).appendingPathComponent(".local/share")
+            env["XDG_CACHE_HOME"] = (testHome as NSString).appendingPathComponent(".cache")
+            env["XDG_STATE_HOME"] = (testHome as NSString).appendingPathComponent(".local/state")
+            env["TMPDIR"] = (testHome as NSString).appendingPathComponent("tmp") + "/"
+            env["ROOTSHELL_UI_TEST"] = "1"
+        } else if let pw = getpwuid(getuid()) {
             if let home = pw.pointee.pw_dir {
                 env["HOME"] = String(cString: home)
             }

@@ -134,7 +134,7 @@ final class LocalAgentAuditLog {
     }
 
     private var fileURL: URL? {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
+        ForkUITestConfiguration.documentsDirectoryURL
             .appendingPathComponent(".ghostty", isDirectory: true)
             .appendingPathComponent("local_agent_audit.json")
     }

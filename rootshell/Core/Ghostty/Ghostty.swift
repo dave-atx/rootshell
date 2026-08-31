@@ -21,6 +21,11 @@ enum Ghostty {
     static func initialize() {
         guard !_initialized else { return }
 
+        // RootShellApp's stored properties can construct Ghostty before its
+        // initializer body. Re-check the explicit fork argument here, before
+        // Ghostty or Catalyst resolves any home/XDG path.
+        ForkUITestConfiguration.activateIfRequested()
+
         // Set GHOSTTY_RESOURCES_DIR to the app bundle's Resources directory
         // so Ghostty can find theme files
         // On Mac Catalyst: Bundle.main.resourceURL points to Contents/Resources
@@ -46,7 +51,8 @@ enum Ghostty {
         // Set XDG_CONFIG_HOME to Application Support directory
         // so Ghostty can find config files on iOS (which has no traditional home directory)
         // Ghostty will look for config at: XDG_CONFIG_HOME/ghostty/config
-        if let appSupport = FileManager.default.urls(
+        if !ForkUITestConfiguration.isEnabled,
+           let appSupport = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
         ).first {
@@ -80,10 +86,12 @@ enum Ghostty {
     private static func setupCatalystEnvironment() {
         logger.info("Setting up Mac Catalyst environment for PTY shells...")
 
-        // Set HOME to the real macOS home directory
+        // Test launches point every shell/XDG lookup at the disposable home
+        // prepared from the private socket directory. Ordinary launches keep
+        // the real macOS home directory.
         // Note: On Catalyst, NSHomeDirectory() returns the real macOS home (e.g., /Users/example)
         // not the sandboxed Documents directory like on iOS
-        let homeDir = NSHomeDirectory()
+        let homeDir = ForkUITestConfiguration.processHomeDirectoryURL.path
         setenv("HOME", homeDir, 1)
         logger.info("   Set HOME=\(homeDir)")
 

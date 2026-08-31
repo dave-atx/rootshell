@@ -15,7 +15,7 @@ final class SyncMigrationManager {
 
     /// Base directory for sync data
     private static var syncDirectory: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        ForkUITestConfiguration.documentsDirectoryURL
             .appendingPathComponent(".ghostty", isDirectory: true)
             .appendingPathComponent("sync", isDirectory: true)
     }
@@ -228,7 +228,7 @@ final class SyncMigrationManager {
     /// Migrate known hosts from legacy JSON file to per-record files
     /// - Returns: Backup file path if migration occurred, nil if no data to migrate
     private static func migrateKnownHosts() throws -> String? {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = ForkUITestConfiguration.documentsDirectoryURL
         let legacyURL = documentsURL
             .appendingPathComponent(".ghostty", isDirectory: true)
             .appendingPathComponent("known_hosts.json")
@@ -311,7 +311,7 @@ final class SyncMigrationManager {
         logger.info("Removed legacy SSH history from UserDefaults")
 
         // Remove legacy known_hosts.json
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = ForkUITestConfiguration.documentsDirectoryURL
         let legacyURL = documentsURL
             .appendingPathComponent(".ghostty", isDirectory: true)
             .appendingPathComponent("known_hosts.json")

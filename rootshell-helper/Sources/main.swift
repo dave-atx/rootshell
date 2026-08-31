@@ -18,6 +18,10 @@ if let flagIndex = arguments.firstIndex(of: "--app-group"), flagIndex + 1 < argu
     AppGroupHelper.overrideGroupIdentifier = arguments[flagIndex + 1]
     NSLog("Using app group from argv: \(arguments[flagIndex + 1])")
 }
+if let flagIndex = arguments.firstIndex(of: "--socket-directory"), flagIndex + 1 < arguments.count {
+    AppGroupHelper.overrideContainerURL = URL(fileURLWithPath: arguments[flagIndex + 1], isDirectory: true)
+    NSLog("Using socket directory from argv")
+}
 
 // Create socket command server
 let server = SocketCommandServer()

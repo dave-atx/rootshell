@@ -24,8 +24,12 @@ class HistoryManager {
     // MARK: - Initialization
 
     init() {
-        // Store history in .ghostty directory
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        // Store history in .ghostty directory. The fork UI-test host has no
+        // reason to touch the user's Catalyst Documents directory; resolving
+        // that URL can raise a folder-privacy prompt before the test starts.
+        let documentsPath = ForkUITestConfiguration.isEnabled
+            ? ForkUITestConfiguration.documentsDirectoryURL
+            : FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let ghosttyDir = documentsPath.appendingPathComponent(".ghostty", isDirectory: true)
         try? FileManager.default.createDirectory(at: ghosttyDir, withIntermediateDirectories: true)
         historyFilePath = ghosttyDir.appendingPathComponent("shell_history.txt")

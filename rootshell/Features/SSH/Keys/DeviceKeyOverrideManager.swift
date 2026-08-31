@@ -21,7 +21,7 @@ final class DeviceKeyOverrideManager {
     private let fileURL: URL
 
     private init() {
-        let documentsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let documentsDir = ForkUITestConfiguration.documentsDirectoryURL
         let ghosttyDir = documentsDir.appendingPathComponent(".ghostty", isDirectory: true)
 
         // Ensure directory exists

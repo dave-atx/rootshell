@@ -25,7 +25,10 @@ final class WindowStateManager {
 
     /// Whether session persistence is enabled (default: true)
     static var isSessionPersistenceEnabled: Bool {
-        SettingsStore.shared.value(Settings.SessionRestore.sessionPersistence)
+        // Fork-only UI tests must start from exactly one fresh window and may
+        // not consume or overwrite the user's saved sessions.
+        guard !ForkUITestConfiguration.isEnabled else { return false }
+        return SettingsStore.shared.value(Settings.SessionRestore.sessionPersistence)
     }
 
     // MARK: - Configuration
@@ -38,7 +41,7 @@ final class WindowStateManager {
 
     /// State file URL (Documents/.ghostty/window_state.json)
     private var stateFileURL: URL {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = ForkUITestConfiguration.documentsDirectoryURL
         let ghosttyDir = documentsURL.appendingPathComponent(".ghostty", isDirectory: true)
         return ghosttyDir.appendingPathComponent(stateFileName)
     }
@@ -366,6 +369,7 @@ final class WindowStateManager {
     /// wipe in-flight restoration progress. Call this early so `hasPendingRestoration`
     /// is authoritative at `scene(_:willConnectTo:)` time (the Catalyst geometry gate).
     func ensureStateLoaded() {
+        guard Self.isSessionPersistenceEnabled else { return }
         guard !hasAttemptedLoad else { return }
         hasAttemptedLoad = true
         _ = loadSavedState()
@@ -374,6 +378,7 @@ final class WindowStateManager {
     /// Load saved state from disk (call once at app launch)
     @discardableResult
     func loadSavedState() -> AppWindowState? {
+        guard Self.isSessionPersistenceEnabled else { return nil }
         ResumeDebugLogger.shared.logMarker("APP LAUNCH")
 
         // Clean up expired Mosh session credentials first
@@ -773,7 +778,7 @@ extension WindowStateManager {
                 return true
             }
 
-            let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let documentsURL = ForkUITestConfiguration.documentsDirectoryURL
             let ghosttyDir = documentsURL.appendingPathComponent(".ghostty", isDirectory: true)
             let fileURL = ghosttyDir.appendingPathComponent("window_state.json")
 

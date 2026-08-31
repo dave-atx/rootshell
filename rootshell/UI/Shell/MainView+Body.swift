@@ -160,6 +160,7 @@ extension MainView {
                 primaryAction: addNewTab,
                 accessibilityLabel: String(localized: "Open Connections")
             )
+            .forkUITestIdentifier("new-connection")
         }
         .overlay(alignment: .leading) {
             if topTabStyle.usesStripLayout {

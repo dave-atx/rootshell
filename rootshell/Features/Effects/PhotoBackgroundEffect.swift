@@ -220,6 +220,10 @@ final class PhotoBackgroundEffect: TerminalEffect, ObservableObject {
     // MARK: - Storage
 
     private static var storageDirectory: URL {
+        if ForkUITestConfiguration.isEnabled {
+            return ForkUITestConfiguration.processHomeDirectoryURL
+                .appendingPathComponent(".local/share/rootshell/PhotoBackground", isDirectory: true)
+        }
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return appSupport.appendingPathComponent("PhotoBackground", isDirectory: true)
     }

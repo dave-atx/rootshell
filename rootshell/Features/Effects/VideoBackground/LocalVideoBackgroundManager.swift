@@ -67,7 +67,7 @@ final class LocalVideoBackgroundManager: ObservableObject {
     private var store = LocalVideoBackgroundStore()
 
     private var rootDirectory: URL {
-        let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let documents = ForkUITestConfiguration.documentsDirectoryURL
         return documents
             .appendingPathComponent(".ghostty", isDirectory: true)
             .appendingPathComponent("video-backgrounds", isDirectory: true)

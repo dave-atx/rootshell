@@ -109,6 +109,12 @@ final class TabExposeView: UIView, TabExposeControllerObserver, PreviewRendering
         isHidden = true
         isUserInteractionEnabled = true
         clipsToBounds = true
+        if ForkUITestConfiguration.isEnabled {
+            // Automation-only contract; the product's VoiceOver semantics
+            // remain independent of this identifier.
+            accessibilityIdentifier = "tab-expose-root"
+            accessibilityLabel = "Tab Exposé"
+        }
 
         backdrop.isUserInteractionEnabled = false
         backdrop.accessibilityElementsHidden = true
@@ -237,6 +243,9 @@ final class TabExposeView: UIView, TabExposeControllerObserver, PreviewRendering
         if controller.isActive {
             isHidden = false
             accessibilityViewIsModal = true
+            if ForkUITestConfiguration.isEnabled {
+                accessibilityValue = controller.showsMultiplexer ? "multiplexer" : "local"
+            }
             lastAppliedProgress = -1
             zoom = TabExposeSettings.zoom()
             resetPage()
@@ -254,6 +263,9 @@ final class TabExposeView: UIView, TabExposeControllerObserver, PreviewRendering
             if isFirstResponder { resignFirstResponder() }
             isHidden = true
             accessibilityViewIsModal = false
+            if ForkUITestConfiguration.isEnabled {
+                accessibilityValue = nil
+            }
             hero.releaseContents()
             syncTerminalConcealment()
             resetPage()
@@ -303,6 +315,9 @@ final class TabExposeView: UIView, TabExposeControllerObserver, PreviewRendering
     func tabExposeDidChangeCells(_ controller: TabExposeController) {
         guard !Ghostty.isSecureDrawProhibitedAtomic else { return }
         guard controller.isActive else { return }
+        if ForkUITestConfiguration.isEnabled {
+            accessibilityValue = controller.showsMultiplexer ? "multiplexer" : "local"
+        }
         if let direction = controller.takeScopeTransition() {
             if controller.reduceMotion() {
                 resetPage()
@@ -1186,6 +1201,9 @@ final class TabExposeCellView: UIView {
         muxPreview.isHidden = true
         mirror.isHidden = false
         mirror.tab = tab
+        if ForkUITestConfiguration.isEnabled {
+            accessibilityIdentifier = nil
+        }
         isAccessibilityElement = true
         accessibilityLabel = tab.title
     }
@@ -1196,6 +1214,13 @@ final class TabExposeCellView: UIView {
         muxPreview.isHidden = false
         muxPreview.feed = feed
         muxPreview.tab = tab
+        if ForkUITestConfiguration.isEnabled, feed?.type == .zmx {
+            // Unlike the cell UUID, the zmx session name is stable across
+            // launches and is the semantic identity the fork tests assert.
+            accessibilityIdentifier = "tab-expose-zmx-session-\(tab.title)"
+        } else if ForkUITestConfiguration.isEnabled {
+            accessibilityIdentifier = nil
+        }
         isAccessibilityElement = true
         accessibilityLabel = tab.badge.map { "\(tab.title), \($0)" } ?? tab.title
     }

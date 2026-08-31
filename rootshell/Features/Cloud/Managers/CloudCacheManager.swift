@@ -82,7 +82,7 @@ class CloudCacheManager: ObservableObject {
     // MARK: - Cache Directory
 
     private var cacheDirectory: URL {
-        let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let documentsPath = ForkUITestConfiguration.documentsDirectoryURL
         return documentsPath
             .appendingPathComponent(".ghostty", isDirectory: true)
             .appendingPathComponent("cloud_cache", isDirectory: true)

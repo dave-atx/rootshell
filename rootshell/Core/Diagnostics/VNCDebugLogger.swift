@@ -62,7 +62,8 @@ final class VNCDebugLogger: Sendable {
     private let bridgeInstalled = OSAllocatedUnfairLock<Bool>(initialState: false)
 
     private init() {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsURL = ForkUITestConfiguration.sterileHomeDirectory
+            ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let ghosttyDir = documentsURL.appendingPathComponent(".ghostty", isDirectory: true)
         self.logFileURL = ghosttyDir.appendingPathComponent("vnc_debug.log")
         self.rotatedLogFileURL = ghosttyDir.appendingPathComponent("vnc_debug.1.log")

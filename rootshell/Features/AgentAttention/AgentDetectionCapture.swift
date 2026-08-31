@@ -44,9 +44,7 @@ final class AgentDetectionCapture {
     /// app's other internal state rather than loose in the rootshell
     /// folder.
     nonisolated static var fileURL: URL? {
-        guard let docs = FileManager.default
-            .urls(for: .documentDirectory, in: .userDomainMask).first
-        else { return nil }
+        let docs = ForkUITestConfiguration.documentsDirectoryURL
         return docs
             .appendingPathComponent(".ghostty", isDirectory: true)
             .appendingPathComponent("agent-detection-captures.jsonl")

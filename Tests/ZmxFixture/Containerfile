@@ -1,0 +1,76 @@
+# Fork-only disposable zmx fixture image. The build context is the zmx
+# checkout, supplied explicitly by zmx-fixture.sh; this file is intentionally
+# kept in the rootshell checkout so the image recipe is reviewable.
+
+FROM debian:12-slim AS zmx-builder
+
+ARG ZIG_VERSION=0.16.0
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y ca-certificates curl xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN set -eu; \
+    case "$(dpkg --print-architecture)" in \
+        amd64) zig_arch=x86_64 ;; \
+        arm64) zig_arch=aarch64 ;; \
+        *) echo "unsupported Debian architecture" >&2; exit 1 ;; \
+    esac; \
+    curl --fail --silent --show-error --location \
+        "https://ziglang.org/download/${ZIG_VERSION}/zig-${zig_arch}-linux-${ZIG_VERSION}.tar.xz" \
+        --output /tmp/zig.tar.xz; \
+    tar -xJf /tmp/zig.tar.xz -C /opt; \
+    mv "/opt/zig-${zig_arch}-linux-${ZIG_VERSION}" /opt/zig; \
+    ln -s /opt/zig/zig /usr/local/bin/zig; \
+    rm -f /tmp/zig.tar.xz
+
+COPY . /src/zmx
+WORKDIR /src/zmx
+
+RUN zig build -Doptimize=ReleaseSafe --prefix /out
+
+FROM debian:12-slim
+
+ARG ZMX_REVISION=unknown
+ARG HELIX_VERSION=25.07.1
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y \
+        bash ca-certificates coreutils curl git htop less openssh-client \
+        openssh-server passwd procps vim-tiny xz-utils \
+    && rm -rf /var/lib/apt/lists/* \
+    && case "$(dpkg --print-architecture)" in \
+        amd64) helix_arch=x86_64 ;; \
+        arm64) helix_arch=aarch64 ;; \
+        *) echo "unsupported Debian architecture" >&2; exit 1 ;; \
+    esac \
+    && helix_dir="helix-${HELIX_VERSION}-${helix_arch}-linux" \
+    && curl --fail --silent --show-error --location \
+        "https://github.com/helix-editor/helix/releases/download/${HELIX_VERSION}/${helix_dir}.tar.xz" \
+        --output /tmp/helix.tar.xz \
+    && tar -xJf /tmp/helix.tar.xz -C /tmp \
+    && install -m 755 "/tmp/${helix_dir}/hx" /usr/local/bin/hx \
+    && install -d /usr/local/lib/helix \
+    && cp -a "/tmp/${helix_dir}/runtime" /usr/local/lib/helix/runtime \
+    && rm -rf /tmp/helix.tar.xz "/tmp/${helix_dir}" \
+    && useradd --create-home --shell /bin/bash zmx \
+    && install -d -m 700 -o zmx -g zmx /home/zmx/.ssh \
+    && printf '%s\n' \
+        'PasswordAuthentication yes' \
+        'PermitEmptyPasswords yes' \
+        'KbdInteractiveAuthentication no' \
+        'PubkeyAuthentication yes' \
+        'UsePAM no' \
+        'PermitRootLogin no' \
+        'AllowUsers zmx' \
+        > /etc/ssh/sshd_config.d/zmx-fixture.conf
+
+ENV HELIX_RUNTIME=/usr/local/lib/helix/runtime
+
+COPY --from=zmx-builder /out/bin/zmx /usr/local/bin/zmx
+
+LABEL org.rootshell.zmx-revision="${ZMX_REVISION}"
+
+# The coordinator copies authorized_keys and starts sshd after the container
+# has started, so no credential is ever part of the image or build context.
+CMD ["sleep", "infinity"]
