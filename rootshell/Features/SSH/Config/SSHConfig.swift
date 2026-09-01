@@ -713,9 +713,7 @@ struct SSHConfig: Codable, Hashable {
     }
 
     static func isEmbeddableHerdrSessionName(_ name: String) -> Bool {
-        !name.isEmpty && name != "." && name != ".." && name.utf8.count <= 64 && name.allSatisfy {
-            $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "." || $0 == "_" || $0 == "-")
-        }
+        MultiplexerSessionName.isEmbeddableHerdr(name)
     }
 
     /// The profile's session-name override, trimmed, or nil when unset. Which
@@ -728,11 +726,11 @@ struct SSHConfig: Codable, Hashable {
     }
 
     static func isEmbeddableMultiplexerSessionName(_ name: String) -> Bool {
-        isEmbeddableHerdrSessionName(name)
+        MultiplexerSessionName.isEmbeddable(name)
     }
 
     static func isEmbeddableZmxSessionName(_ name: String) -> Bool {
-        isEmbeddableMultiplexerSessionName(name) && !name.hasPrefix("-")
+        MultiplexerSessionName.isEmbeddableZmx(name)
     }
 
     /// Builds the `sh -c '...'` line that attaches to (or creates) a herdr
