@@ -54,6 +54,79 @@ struct ZmxSessionInfo: Identifiable, Equatable, Sendable {
     }
 }
 
+// MARK: - Debug parser fixtures
+
+#if DEBUG
+import SwiftUI
+
+/// Inline parser fixtures for checking current and legacy `zmx list` output in
+/// the real picker. They are deliberately synthetic so this fork branch stays
+/// safe to publish.
+private enum ZmxParserFixtures {
+    static let current = """
+    ::SESSIONS::
+      name=api\tpid=4821\tclients=0\tcreated=1700000000\tcwd=file://build-host/var/work/api\tproject=api
+      name=worker-1\tpid=4990\tclients=2\tcreated=1700003600\tcwd=file://build-host/var/work/web%20app\trole=assistant
+      name=task\tpid=5002\tclients=0\tcreated=1700005400\tcwd=file://build-host/tmp\tended=1700005500\texit_code=1
+      name=cmdtest\tpid=5003\tclients=0\tcreated=1700005800\tcwd=file://build-host/var/work\tcmd=sh -c 'echo a=b; sleep infinity'
+      name=shadow\tpid=5004\tclients=0\tcreated=1700005940\tcwd=file://build-host/var/work\tclients=99\terr=nope
+      name=stale\terr=ConnectionRefused\tstatus=cleaning up
+      name=frozen\terr=Timeout\tstatus=unreachable
+    ::CAPTURES::
+    ::CAPTURE:api::
+    builder@build-host:/var/work/api$ ./run --watch
+    listening on :8080
+    ::CAPTURE:worker-1::
+    \u{1B}[1m\u{1B}[38;5;4m● Working\u{1B}[0m on the parser
+    """
+
+    static let legacy = """
+    ::SESSIONS::
+      name=api\tpid=4821\tclients=0\tcreated=1700000000\tstart_dir=/var/work/api\tproject=api
+      name=worker-1\tpid=4990\tclients=1\tcreated=1700003600\tstart_dir=/var/work/web app\trole=assistant
+    """
+}
+
+private struct ZmxParserFixturePreview: View {
+    let title: String
+    let fixture: String
+    @State private var attachMode: TmuxAutoMode = .regular
+    @State private var selected = 0
+
+    var body: some View {
+        let sessions = ZmxDiscoveryParser.parse(output: fixture)
+            .map { MultiplexerSession.from(zmx: $0) }
+        VStack(spacing: 0) {
+            Text(verbatim: "\(title) — \(sessions.count) sessions")
+                .font(.caption.monospaced())
+                .padding(6)
+            SessionPickerOverlay(
+                sessions: sessions,
+                sessionTypes: [.zmx],
+                selectedIndex: min(selected, max(sessions.count - 1, 0)),
+                hasUserTyped: false,
+                tmuxAttachMode: $attachMode,
+                allowsTmuxControlAttach: false,
+                onSelect: { _ in },
+                onChangeSelection: { selected = $0 },
+                onDismiss: {}
+            )
+        }
+    }
+}
+
+/// Six live rows. This checks error-row rejection, URI decoding, label
+/// boundaries, duplicate built-in keys, and commands containing `=`.
+#Preview("zmx current parser fixture") {
+    ZmxParserFixturePreview(title: "Current zmx output", fixture: ZmxParserFixtures.current)
+}
+
+/// Legacy `start_dir=` values are bare paths and must not be URI-decoded.
+#Preview("zmx legacy parser fixture") {
+    ZmxParserFixturePreview(title: "Legacy zmx output", fixture: ZmxParserFixtures.legacy)
+}
+#endif
+
 // MARK: - Parser
 
 enum ZmxDiscoveryParser {
