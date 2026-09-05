@@ -1,0 +1,1 @@
+../../../../rootshell/Core/Shell/LoginShellCommand.swift
