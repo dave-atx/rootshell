@@ -15,15 +15,18 @@ containerfile=$script_dir/Containerfile
 podman_bin=${PODMAN_BIN:-podman}
 zmx_repo=${ZMX_REPO:-../zmx}
 fixture_image=${ZMX_FIXTURE_IMAGE:-rootshell-zmx-fixture:local}
-fixture_user=zmx
+fixture_bash_user=zmx
+fixture_fish_user=zmxfish
+fixture_shell=${FIXTURE_SHELL:-bash}
+fixture_user=
 fixture_host=127.0.0.1
 fixture_state_dir=
 
 usage() {
     cat <<'EOF'
 Usage:
-  zmx-fixture.sh start [--env-file FILE]
-  zmx-fixture.sh run [--env-file FILE] -- COMMAND [ARG...]
+  zmx-fixture.sh start [--env-file FILE] [--shell bash|fish]
+  zmx-fixture.sh run [--env-file FILE] [--shell bash|fish] -- COMMAND [ARG...]
   zmx-fixture.sh env STATE_DIR
   zmx-fixture.sh seed STATE_DIR SUFFIX [SUFFIX...]
   zmx-fixture.sh exec STATE_DIR COMMAND [ARG...]
@@ -35,10 +38,16 @@ Environment:
   ZMX_REPO              zmx checkout used as the image build context
   ZMX_FIXTURE_IMAGE     local image tag (default: rootshell-zmx-fixture:local)
   PODMAN_BIN            Podman executable (default: podman)
+  FIXTURE_SHELL         login shell the SSH username targets: bash (default)
+                        or fish. Same as --shell; --shell wins if both are
+                        given. Both accounts exist in the container
+                        regardless of this selection; it only picks which
+                        one `seed`/`exec`/`env`/`stop` operate on.
 
 The start environment records are:
   ZMX_FIXTURE_STATE_DIR, ZMX_FIXTURE_CONTAINER_ID,
   ZMX_FIXTURE_HOST, ZMX_FIXTURE_PORT, ZMX_FIXTURE_USERNAME,
+  ZMX_FIXTURE_SHELL, ZMX_FIXTURE_BASH_USER, ZMX_FIXTURE_FISH_USER,
   ZMX_FIXTURE_PRIVATE_KEY, ZMX_FIXTURE_SESSION_PREFIX,
   ZMX_FIXTURE_ZMX_REVISION
 EOF
@@ -51,6 +60,14 @@ die() {
 
 need_command() {
     command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
+}
+
+shell_user() {
+    case "$1" in
+        bash) printf '%s\n' "$fixture_bash_user" ;;
+        fish) printf '%s\n' "$fixture_fish_user" ;;
+        *) die "unsupported --shell value: $1 (expected bash or fish)" ;;
+    esac
 }
 
 validate_suffix() {
@@ -86,9 +103,13 @@ load_state() {
     fixture_key=$(state_value key "$state_file")
     fixture_known_hosts=$(state_value known_hosts "$state_file")
     fixture_revision=$(state_value revision "$state_file")
+    fixture_shell=$(state_value shell "$state_file")
+    fixture_user=$(state_value user "$state_file")
     [ -n "$fixture_container_id" ] || die "state has no container id: $fixture_state_dir"
     [ -n "$fixture_port" ] || die "state has no SSH port: $fixture_state_dir"
     [ -n "$fixture_prefix" ] || die "state has no session prefix: $fixture_state_dir"
+    [ -n "$fixture_shell" ] || die "state has no shell selector: $fixture_state_dir"
+    [ -n "$fixture_user" ] || die "state has no SSH username: $fixture_state_dir"
     [ -f "$fixture_key" ] || die "fixture key is missing: $fixture_key"
 }
 
@@ -118,6 +139,17 @@ control_ssh() {
         "$fixture_user@$fixture_host" "$@"
 }
 
+provision_account() {
+    # Installs the coordinator's public key and clears the password for one
+    # account in the running container. Called once per account so either
+    # the bash (zmx) or fish (zmxfish) account can be used without a restart.
+    account_user=$1
+    run_podman cp "$fixture_key.pub" "$fixture_container_id:/home/$account_user/.ssh/authorized_keys"
+    run_podman exec "$fixture_container_id" chown "$account_user:$account_user" "/home/$account_user/.ssh/authorized_keys"
+    run_podman exec "$fixture_container_id" chmod 600 "/home/$account_user/.ssh/authorized_keys"
+    run_podman exec "$fixture_container_id" passwd -d "$account_user" >/dev/null
+}
+
 write_env() {
     env_output=$1
     {
@@ -126,6 +158,9 @@ write_env() {
         printf 'ZMX_FIXTURE_HOST=%s\n' "$fixture_host"
         printf 'ZMX_FIXTURE_PORT=%s\n' "$fixture_port"
         printf 'ZMX_FIXTURE_USERNAME=%s\n' "$fixture_user"
+        printf 'ZMX_FIXTURE_SHELL=%s\n' "$fixture_shell"
+        printf 'ZMX_FIXTURE_BASH_USER=%s\n' "$fixture_bash_user"
+        printf 'ZMX_FIXTURE_FISH_USER=%s\n' "$fixture_fish_user"
         printf 'ZMX_FIXTURE_PRIVATE_KEY=%s\n' "$fixture_key"
         printf 'ZMX_FIXTURE_SESSION_PREFIX=%s\n' "$fixture_prefix"
         printf 'ZMX_FIXTURE_ZMX_REVISION=%s\n' "$fixture_revision"
@@ -235,6 +270,7 @@ start_fixture() {
     need_command ssh
     need_command ssh-keygen
     [ -f "$containerfile" ] || die "missing Containerfile: $containerfile"
+    fixture_user=$(shell_user "$fixture_shell")
     require_rootless_podman
 
     fixture_state_dir=$(mktemp -d "${TMPDIR:-/tmp}/rootshell-zmx-fixture.XXXXXX")
@@ -275,13 +311,16 @@ prefix=$fixture_prefix
 key=$fixture_key
 known_hosts=$fixture_known_hosts
 revision=$fixture_revision
+shell=$fixture_shell
+user=$fixture_user
 EOF
     chmod 600 "$fixture_state_dir/state"
 
-    run_podman cp "$fixture_key.pub" "$fixture_container_id:/home/$fixture_user/.ssh/authorized_keys"
-    run_podman exec "$fixture_container_id" chown "$fixture_user:$fixture_user" "/home/$fixture_user/.ssh/authorized_keys"
-    run_podman exec "$fixture_container_id" chmod 600 "/home/$fixture_user/.ssh/authorized_keys"
-    run_podman exec "$fixture_container_id" passwd -d "$fixture_user" >/dev/null
+    # Both accounts are provisioned every run, regardless of which one this
+    # invocation selected, so a caller can switch --shell against the same
+    # container without restarting it.
+    provision_account "$fixture_bash_user"
+    provision_account "$fixture_fish_user"
     run_podman exec --detach "$fixture_container_id" sh -c 'mkdir -p /run/sshd && ssh-keygen -A && exec /usr/sbin/sshd -D -e' >/dev/null
 
     ssh_ready=false
@@ -324,6 +363,37 @@ stop_fixture() {
     cleanup_state "$fixture_state_dir"
 }
 
+launch_opt_count=0
+
+parse_launch_opts() {
+    # Parses the leading --env-file/--shell options shared by `start` and
+    # `run`. Sets env_file and fixture_shell, and leaves launch_opt_count at
+    # the number of arguments consumed so the caller can `shift` its own
+    # positional parameters (a function's "$@" is its own copy in POSIX sh,
+    # so `shift` in here cannot shift the caller's).
+    env_file=
+    launch_opt_count=0
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --env-file)
+                [ "$#" -ge 2 ] || die '--env-file requires a path'
+                env_file=$2
+                shift 2
+                launch_opt_count=$((launch_opt_count + 2))
+                ;;
+            --shell)
+                [ "$#" -ge 2 ] || die '--shell requires bash or fish'
+                fixture_shell=$2
+                shift 2
+                launch_opt_count=$((launch_opt_count + 2))
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
+}
+
 self_check() {
     need_command sh
     need_command sed
@@ -333,6 +403,53 @@ self_check() {
     need_command "$podman_bin"
     [ -r "$containerfile" ] || die "cannot read Containerfile: $containerfile"
     sh -n "$0"
+
+    [ "$(shell_user bash)" = "$fixture_bash_user" ] || die 'self-check: shell_user bash mismatch'
+    [ "$(shell_user fish)" = "$fixture_fish_user" ] || die 'self-check: shell_user fish mismatch'
+    if (shell_user bogus) >/dev/null 2>&1; then
+        die 'self-check: shell_user accepted an invalid shell name'
+    fi
+
+    saved_fixture_shell=$fixture_shell
+
+    fixture_shell=bash
+    parse_launch_opts --shell fish --env-file /tmp/zmx-fixture-selfcheck-env -- run-command
+    [ "$fixture_shell" = fish ] || die 'self-check: --shell did not update fixture_shell'
+    [ "$env_file" = /tmp/zmx-fixture-selfcheck-env ] || die 'self-check: --env-file did not update env_file'
+    [ "$launch_opt_count" -eq 4 ] || die 'self-check: unexpected launch_opt_count with both options'
+
+    fixture_shell=bash
+    parse_launch_opts -- run-command
+    [ "$fixture_shell" = bash ] || die 'self-check: fixture_shell changed with no --shell given'
+    [ -z "$env_file" ] || die 'self-check: env_file set with no --env-file given'
+    [ "$launch_opt_count" -eq 0 ] || die 'self-check: launch_opt_count nonzero with no options'
+
+    if (parse_launch_opts --shell) >/dev/null 2>&1; then
+        die 'self-check: --shell without a value should be rejected'
+    fi
+    if (parse_launch_opts --env-file) >/dev/null 2>&1; then
+        die 'self-check: --env-file without a value should be rejected'
+    fi
+
+    fixture_shell=$saved_fixture_shell
+
+    check_dir=$(mktemp -d "${TMPDIR:-/tmp}/rootshell-zmx-fixture-selfcheck.XXXXXX")
+    fixture_state_dir=$check_dir
+    fixture_container_id=selfcheck-container
+    fixture_port=22222
+    fixture_prefix=rs-xcui-selfcheck
+    fixture_key=$check_dir/id_ed25519
+    fixture_revision=selfcheck
+    fixture_shell=fish
+    fixture_user=$(shell_user "$fixture_shell")
+    : > "$fixture_key"
+    write_env "$check_dir/env"
+    grep -q '^ZMX_FIXTURE_USERNAME=zmxfish$' "$check_dir/env" || die 'self-check: env missing selected username'
+    grep -q '^ZMX_FIXTURE_SHELL=fish$' "$check_dir/env" || die 'self-check: env missing shell selector'
+    grep -q '^ZMX_FIXTURE_BASH_USER=zmx$' "$check_dir/env" || die 'self-check: env missing bash account name'
+    grep -q '^ZMX_FIXTURE_FISH_USER=zmxfish$' "$check_dir/env" || die 'self-check: env missing fish account name'
+    rm -rf "$check_dir"
+
     echo 'zmx-fixture: self-check passed'
 }
 
@@ -346,12 +463,8 @@ case "$command_name" in
         self_check
         ;;
     start)
-        env_file=
-        if [ "${1:-}" = '--env-file' ]; then
-            [ "$#" -ge 2 ] || die '--env-file requires a path'
-            env_file=$2
-            shift 2
-        fi
+        parse_launch_opts "$@"
+        shift "$launch_opt_count"
         [ "$#" -eq 0 ] || die "unexpected start argument: $1"
         start_fixture
         if [ -n "$env_file" ]; then
@@ -361,12 +474,8 @@ case "$command_name" in
         trap - INT TERM HUP 0
         ;;
     run)
-        env_file=
-        if [ "${1:-}" = '--env-file' ]; then
-            [ "$#" -ge 2 ] || die '--env-file requires a path'
-            env_file=$2
-            shift 2
-        fi
+        parse_launch_opts "$@"
+        shift "$launch_opt_count"
         [ "${1:-}" = '--' ] || die 'run requires -- before the command'
         shift
         [ "$#" -gt 0 ] || die 'run requires a command'

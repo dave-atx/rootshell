@@ -33,11 +33,12 @@ FROM debian:12-slim
 
 ARG ZMX_REVISION=unknown
 ARG HELIX_VERSION=25.07.1
+ARG TSSHD_VERSION=0.1.9
 
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
-        bash ca-certificates coreutils curl git htop less openssh-client \
-        openssh-server passwd procps vim-tiny xz-utils \
+        bash ca-certificates coreutils curl fish git htop less mosh \
+        openssh-client openssh-server passwd procps vim-tiny xz-utils \
     && rm -rf /var/lib/apt/lists/* \
     && case "$(dpkg --print-architecture)" in \
         amd64) helix_arch=x86_64 ;; \
@@ -53,8 +54,23 @@ RUN apt-get update \
     && install -d /usr/local/lib/helix \
     && cp -a "/tmp/${helix_dir}/runtime" /usr/local/lib/helix/runtime \
     && rm -rf /tmp/helix.tar.xz "/tmp/${helix_dir}" \
+    && case "$(dpkg --print-architecture)" in \
+        amd64) tsshd_arch=x86_64 ;; \
+        arm64) tsshd_arch=aarch64 ;; \
+        *) echo "unsupported Debian architecture" >&2; exit 1 ;; \
+    esac \
+    && tsshd_dir="tsshd_${TSSHD_VERSION}_linux_${tsshd_arch}" \
+    && curl --fail --silent --show-error --location \
+        "https://github.com/trzsz/tsshd/releases/download/v${TSSHD_VERSION}/${tsshd_dir}.tar.gz" \
+        --output /tmp/tsshd.tar.gz \
+    && tar -xzf /tmp/tsshd.tar.gz -C /tmp \
+    && install -m 755 "/tmp/${tsshd_dir}/tsshd" /usr/local/bin/tsshd \
+    && rm -rf /tmp/tsshd.tar.gz "/tmp/${tsshd_dir}" \
     && useradd --create-home --shell /bin/bash zmx \
     && install -d -m 700 -o zmx -g zmx /home/zmx/.ssh \
+    && fish_path=$(command -v fish) \
+    && useradd --create-home --shell "$fish_path" zmxfish \
+    && install -d -m 700 -o zmxfish -g zmxfish /home/zmxfish/.ssh \
     && printf '%s\n' \
         'PasswordAuthentication yes' \
         'PermitEmptyPasswords yes' \
@@ -62,7 +78,7 @@ RUN apt-get update \
         'PubkeyAuthentication yes' \
         'UsePAM no' \
         'PermitRootLogin no' \
-        'AllowUsers zmx' \
+        'AllowUsers zmx zmxfish' \
         > /etc/ssh/sshd_config.d/zmx-fixture.conf
 
 ENV HELIX_RUNTIME=/usr/local/lib/helix/runtime
