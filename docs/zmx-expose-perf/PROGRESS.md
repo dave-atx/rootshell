@@ -107,19 +107,44 @@ xcodebuild build -project rootshell.xcodeproj -scheme rootshell-Standalone \
 - [x] **I1** Add instrumentation to the MuxExpose path (signposts + structured
       timing covering detect / resolveSession / each tick / parse / render)
 - [x] **M1** Capture and record the BASELINE numbers in `BASELINE.md`
-- [ ] **T1** Implement Track 1 changes *justified by the baseline data only*.
-      The data says: cut ROUND TRIPS in the cold-start path. Specifically
-      (a) skip `detect()` when the binding is still live — `:170` forces it for
-      zmx on every open; (b) fold `resolveSession()` into the first tick, whose
-      script already runs `zmx list`; (c) let the first tick fetch captures
-      instead of topology-then-captures. Each saves ~1 RTT of the 4.
-      Do NOT touch the fetchCap ramp: truncation never fires at any tested
-      scale (191KB at 24 sessions vs a 512KB cap).
-- [ ] **V1** Re-benchmark; prove faster + no regressions; record in `RESULTS.md`
-- [ ] **V2** One end-to-end XCUITest run as whole-system confirmation
+- [x] **T1** Implement Track 1 changes *justified by the baseline data only*
+      (branch `perf/zmx-expose-coldstart`). Skips `detect()` for a cached
+      zmx binding (revalidated by the first tick's own `zmx list` instead,
+      same `boundSessionIsUnavailable` mechanism the steady-state loop
+      already trusted for detach detection); seeds the first tick's fetch
+      with the already-known session name instead of a topology-only first
+      tick; only forces a second immediate tick when something is still
+      unfetched. See `MuxZmxBootstrap` in `MultiplexerExposeAdapter.swift`.
+      Correction found while implementing: `resolveSession()` never actually
+      ran for the cached-zmx path even before this change (a zmx binding's
+      `sessionName` is never nil) — the real old sequence was 3 execs, not
+      4; see RESULTS.md for the full explanation. fetchCap ramp untouched.
+- [x] **V1** Re-benchmarked; recorded in `RESULTS.md`. Cached-zmx cold start:
+      3 execs -> 1 (1 session) or 2 (N>1 sessions). Saves 64-81% at 1
+      session and 37-54% at N>1, across 0/30/80ms -- holds at every tested
+      latency and session count.
+- [ ] **V2** One end-to-end XCUITest run as whole-system confirmation. NOT
+      run: the existing `testDetachThenTabExposeReturnsToLocal` (attach,
+      expose, detach, expose again, expect local + no stale cell) is exactly
+      this, but it runs through `scripts/test-macos-ui-local.sh`, which
+      ad-hoc-signs the build and resets host TCC/LaunchServices state --
+      out of step with this environment's paid-team-signing policy, so
+      deliberately not run here. See RESULTS.md's correctness section.
 
 ## Status log
 
+- 2026-09-08 (latest): T1+V1 done on `perf/zmx-expose-coldstart` (branched
+  from `perf/zmx-expose` @ 70310e0). New `MuxZmxBootstrap` enum in
+  `MultiplexerExposeAdapter.swift` (headlessly testable, no GhosttyKit
+  dependency) collapses the cached-zmx cold start from 3 execs to 1 (1
+  session) or 2 (N>1). All required local gates green (`Tests/ZmxLogic`,
+  `Tests/LoginShellLogic`, `docs/zmx-expose-checks/run.sh` -- now 33
+  sections --, and the Mac Catalyst build). Bench harness gained a
+  `tick_bootstrap_seed` phase (`bench/run_bench.py`) to measure the new
+  combined tick directly; `bench/sync-manifest.txt` re-pinned for the line
+  shifts this change caused (hashes unchanged -- confirmed byte-identical
+  before re-pinning). Full before/after sweep in RESULTS.md. V2 (XCUITest)
+  not run -- see RESULTS.md and the V2 task note above for why.
 - 2026-09-08 (latest): B1-B3 done — `docs/zmx-expose-perf/bench/` (script-
   level harness over real SSH, transcribed-and-sync-checked scripts,
   realistic seeded content, latency injection with a verified fallback

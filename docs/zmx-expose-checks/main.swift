@@ -784,5 +784,63 @@ do {
           ) == .ambiguous)
 }
 
+print("\n== 33. MuxZmxBootstrap: cold-start round-trip collapse (docs/zmx-expose-perf) ==")
+do {
+    func pane(_ id: String, previewable: Bool = true) -> MuxPane {
+        MuxPane(id: id, rect: MuxCellRect(x: 0, y: 0, width: 80, height: 24), isActive: true, isPreviewable: previewable, title: nil)
+    }
+    func tab(_ id: String, _ panes: [MuxPane]) -> MuxTab {
+        MuxTab(id: id, index: 0, title: id, isActive: true, cols: 80, rows: 24, panes: panes, badge: nil)
+    }
+    func frame(_ ansi: String = "x") -> MuxPaneFrame {
+        MuxPaneFrame(ansi: ansi, cursor: nil, revision: "r")
+    }
+
+    // seededFetch
+    check("empty fetch + no snapshot + zmx + known session -> seeds it",
+          MuxZmxBootstrap.seededFetch(normallyComputed: [], snapshot: nil, type: .zmx, sessionName: "alpha") == ["alpha"])
+    check("a real fetchList answer is left alone",
+          MuxZmxBootstrap.seededFetch(normallyComputed: ["beta"], snapshot: nil, type: .zmx, sessionName: "alpha") == ["beta"])
+    check("topology already known -> not seeded (fetchList already has the real answer)",
+          MuxZmxBootstrap.seededFetch(
+              normallyComputed: [], snapshot: MuxExposeSnapshot(tabs: [], activeTabID: nil), type: .zmx, sessionName: "alpha"
+          ) == [])
+    check("tmux never seeds, even with a name and no snapshot yet",
+          MuxZmxBootstrap.seededFetch(normallyComputed: [], snapshot: nil, type: .tmux, sessionName: "alpha") == [])
+    check("zellij never seeds",
+          MuxZmxBootstrap.seededFetch(normallyComputed: [], snapshot: nil, type: .zellij, sessionName: "alpha") == [])
+    check("herdr never seeds",
+          MuxZmxBootstrap.seededFetch(normallyComputed: [], snapshot: nil, type: .herdr, sessionName: "default") == [])
+    check("no known session name -> nothing to seed with",
+          MuxZmxBootstrap.seededFetch(normallyComputed: [], snapshot: nil, type: .zmx, sessionName: nil) == [])
+    check("no adapter resolved yet -> nothing to seed with",
+          MuxZmxBootstrap.seededFetch(normallyComputed: [], snapshot: nil, type: nil, sessionName: "alpha") == [])
+
+    // needsImmediateFollowUp
+    let oneSessionSnapshot = MuxExposeSnapshot(tabs: [tab("alpha", [pane("alpha")])], activeTabID: "alpha")
+    let twoSessionSnapshot = MuxExposeSnapshot(tabs: [tab("alpha", [pane("alpha")]), tab("beta", [pane("beta")])], activeTabID: "alpha")
+    check("zmx, 1 session, bootstrap already fetched it -> no extra round trip",
+          MuxZmxBootstrap.needsImmediateFollowUp(type: .zmx, snapshot: oneSessionSnapshot, frames: ["alpha": frame()]) == false)
+    check("zmx, 1 session, capture missing (empty/failed) -> still needs the retry",
+          MuxZmxBootstrap.needsImmediateFollowUp(type: .zmx, snapshot: oneSessionSnapshot, frames: [:]) == true)
+    check("zmx, 2 sessions, only the seeded one has a frame -> the other still needs a tick",
+          MuxZmxBootstrap.needsImmediateFollowUp(type: .zmx, snapshot: twoSessionSnapshot, frames: ["alpha": frame()]) == true)
+    check("zmx, 2 sessions, both already have frames -> no extra round trip",
+          MuxZmxBootstrap.needsImmediateFollowUp(type: .zmx, snapshot: twoSessionSnapshot, frames: ["alpha": frame(), "beta": frame()]) == false)
+    let pluginOnlySnapshot = MuxExposeSnapshot(tabs: [tab("p", [pane("p1", previewable: false)])], activeTabID: "p")
+    check("zmx, only a non-previewable pane -> nothing to wait for",
+          MuxZmxBootstrap.needsImmediateFollowUp(type: .zmx, snapshot: pluginOnlySnapshot, frames: [:]) == false)
+    // Every other adapter keeps forcing the extra tick unconditionally --
+    // their first tick never seeds a fetch, so this must stay unchanged.
+    check("tmux always forces the follow-up tick, even with frames already present",
+          MuxZmxBootstrap.needsImmediateFollowUp(type: .tmux, snapshot: oneSessionSnapshot, frames: ["alpha": frame()]) == true)
+    check("zellij always forces the follow-up tick",
+          MuxZmxBootstrap.needsImmediateFollowUp(type: .zellij, snapshot: oneSessionSnapshot, frames: ["alpha": frame()]) == true)
+    check("herdr always forces the follow-up tick",
+          MuxZmxBootstrap.needsImmediateFollowUp(type: .herdr, snapshot: oneSessionSnapshot, frames: ["alpha": frame()]) == true)
+    check("no adapter resolved yet always forces the follow-up tick",
+          MuxZmxBootstrap.needsImmediateFollowUp(type: nil, snapshot: oneSessionSnapshot, frames: ["alpha": frame()]) == true)
+}
+
 print("\n\(failures == 0 ? "ALL CHECKS PASSED" : "\(failures) CHECK(S) FAILED")")
 exit(failures == 0 ? 0 : 1)

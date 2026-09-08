@@ -640,7 +640,26 @@ final class MultiplexerExposeFeed {
     }
 
     private func run(generation: UInt64) async {
-        if adapter == nil || validatingZmxBinding {
+        if validatingZmxBinding, adapter != nil, sessionName != nil {
+            // A cached zmx binding's session name is already known, so
+            // detect()'s only remaining job here is revalidation: proving
+            // the session is still attached to THIS pane rather than
+            // stale/detached (see `start()`'s doc comment on
+            // `requiresZmxValidation`). `ZmxExposeAdapter.tickScript`
+            // already runs `zmx list` on every tick, and `parseTick`
+            // already treats that listing as authoritative for liveness
+            // (`boundSessionIsUnavailable`, the same check the steady-state
+            // loop below already trusts to catch a mid-life detach) -- so
+            // the first tick can supply that same proof instead of a
+            // dedicated detect() probe, saving one full round trip. If the
+            // listing proves the session detached, `tick(generation:)`
+            // reaches the exact `.unsupported` +
+            // `clearCurrentPassthroughBinding()` end state a conclusive
+            // `detect()` failure reaches on the genuinely-unknown path
+            // below. See docs/zmx-expose-perf/PROGRESS.md.
+            validatingZmxBinding = false
+            MuxExposeSignposts.signposter.emitEvent("detect.skipped", id: signpostID)
+        } else if adapter == nil || validatingZmxBinding {
             defer { validatingZmxBinding = false }
             let detected = await detect()
             guard isCurrent(generation) else {
@@ -1096,7 +1115,13 @@ final class MultiplexerExposeFeed {
     private func tick(generation: UInt64) async -> Outcome {
         guard let terminal, let adapter else { return .unsupported }
         let now = CACurrentMediaTime()
-        let request = MuxTickRequest(fetch: fetchList(now: now), knownRevisions: frames.mapValues(\.revision))
+        // See MuxZmxBootstrap's doc comment: for zmx, seeds the very first
+        // (topology-less) tick with the already-known session name instead
+        // of leaving it empty until a second, topology-informed tick.
+        let fetch = MuxZmxBootstrap.seededFetch(
+            normallyComputed: fetchList(now: now), snapshot: snapshot, type: type, sessionName: sessionName
+        )
+        let request = MuxTickRequest(fetch: fetch, knownRevisions: frames.mapValues(\.revision))
         let nonce = Self.nonce()
         let script = adapter.tickScript(session: sessionName, request: request, nonce: nonce)
         // Instrumentation only: begin/end wraps the whole tick, metadata
@@ -1207,8 +1232,15 @@ final class MultiplexerExposeFeed {
             }
         }
 
-        // First topology lands with no frames: fetch the visible set right away.
-        if tickCount == 1 { return .immediate }
+        // First topology lands with no frames for tmux/zellij/herdr (their
+        // first tick never seeds a fetch -- see `MuxZmxBootstrap`, gated to
+        // `type == .zmx`): keep fetching the visible set right away,
+        // exactly as before. zmx's first tick may already have fetched its
+        // one seeded pane there, so only force the extra round trip when
+        // some previewable pane still has no frame.
+        if tickCount == 1, MuxZmxBootstrap.needsImmediateFollowUp(type: type, snapshot: result.snapshot, frames: frames) {
+            return .immediate
+        }
         if changed {
             interval = floorInterval
         } else {

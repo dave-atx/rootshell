@@ -67,6 +67,51 @@ nonisolated enum MuxZmxDetachTransfer {
     }
 }
 
+/// Whether the very first tick of a session should already ask for a
+/// specific pane's capture, before its topology (`MuxExposeSnapshot`) is
+/// known at all.
+///
+/// Confined to zmx: its "tabs" are 1:1 with its sessions, so a session name
+/// already known from a cached or just-detected binding IS the id of the
+/// one pane it is safe to request before topology arrives -- no other
+/// adapter can make that leap (tmux/zellij/herdr pane ids are not
+/// addressable by session name alone). Seeding it here lets that pane's
+/// capture land in the SAME exec as the topology listing, instead of
+/// waiting for a second, topology-informed tick to even ask for it.
+/// See `MultiplexerExposeFeed.tick(generation:)` and
+/// docs/zmx-expose-perf/PROGRESS.md.
+nonisolated enum MuxZmxBootstrap {
+    /// `fetch` is `fetchList`'s normal (topology-driven) answer. Left alone
+    /// once it already has candidates, or once the topology is already
+    /// known (a later tick, or a feed-level cache hit that restored a
+    /// snapshot before the loop started) -- the seed only ever applies to
+    /// the genuinely first, topology-less tick of a zmx session.
+    static func seededFetch(
+        normallyComputed fetch: [String],
+        snapshot: MuxExposeSnapshot?,
+        type: MultiplexerType?,
+        sessionName: String?
+    ) -> [String] {
+        guard fetch.isEmpty, snapshot == nil, type == .zmx, let sessionName else { return fetch }
+        return [sessionName]
+    }
+
+    /// Whether the tick loop must force one more tick immediately after the
+    /// first, rather than falling back to normal pacing. Every adapter
+    /// other than zmx always does, matching today's unconditional
+    /// behavior there unchanged. zmx only does while some previewable pane
+    /// in the fresh topology still has no frame -- `seededFetch` above may
+    /// already have covered every one of them (the common single-session
+    /// case), in which case the extra round trip is skipped entirely.
+    static func needsImmediateFollowUp(
+        type: MultiplexerType?,
+        snapshot: MuxExposeSnapshot,
+        frames: [String: MuxPaneFrame]
+    ) -> Bool {
+        type != .zmx || snapshot.allPanes.contains { $0.isPreviewable && frames[$0.id] == nil }
+    }
+}
+
 nonisolated protocol MultiplexerExposeAdapter: Sendable {
     var type: MultiplexerType { get }
 

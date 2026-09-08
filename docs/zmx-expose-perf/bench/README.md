@@ -70,6 +70,7 @@ Per (latency, session count) configuration, the harness times:
 | `resolve_session` | `zmx list --short` | `MultiplexerExposeFeed.resolveSession()` / `ZmxExposeAdapter.resolveSessionScript` |
 | `tick_topology_only` | `zmx list`, no captures (`fetch=[]`) | a tick that only needs to redraw topology |
 | `tick_with_captures` | `zmx list` + `zmx history --vt \| tail -n 80` for every seeded session | a full refresh tick |
+| `tick_bootstrap_seed` | `zmx list` + `zmx history --vt \| tail -n 80` for exactly ONE seeded session, regardless of how many exist | `perf/zmx-expose-coldstart`: the combined validate+topology+first-capture tick a reopened, cached zmx binding now sends as its first (and, at 1 session, only) tick -- see `MuxZmxBootstrap.seededFetch` in `MultiplexerExposeAdapter.swift` and `docs/zmx-expose-perf/PROGRESS.md` |
 
 Each phase runs `--reps` times (default 5) per configuration and reports
 **median, min, max** wall-clock milliseconds and reply byte size -- never a

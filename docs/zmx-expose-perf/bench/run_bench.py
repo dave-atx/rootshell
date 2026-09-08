@@ -441,6 +441,20 @@ def run_sweep(args: argparse.Namespace) -> dict:
                                               args.reps, RESPONSE_CAP_TICK)
                         capture_res = run_phase(ssh, lambda: mux_scripts.tick_script(names, mux_scripts.nonce()),
                                                  args.reps, RESPONSE_CAP_TICK)
+                        # perf/zmx-expose-coldstart: what the reopen-a-cached
+                        # -zmx-binding cold start now sends as its FIRST (and,
+                        # at 1 session, only) tick -- `zmx list` plus a
+                        # capture for just the one session already known from
+                        # the cached binding (MuxZmxBootstrap.seededFetch in
+                        # MultiplexerExposeAdapter.swift), rather than a
+                        # topology-only tick. Fixed at one fetched name
+                        # regardless of `count` -- that fixedness IS the
+                        # point being measured (it no longer scales with
+                        # session count the way `tick_with_captures` does).
+                        bootstrap_res = run_phase(
+                            ssh, lambda: mux_scripts.tick_script(names[:1], mux_scripts.nonce()),
+                            args.reps, RESPONSE_CAP_TICK
+                        )
 
                         report["configs"].append({
                             "latency_target_ms": target_ms,
@@ -453,6 +467,7 @@ def run_sweep(args: argparse.Namespace) -> dict:
                                 "resolve_session": resolve_res.summarize(),
                                 "tick_topology_only": topo_res.summarize(),
                                 "tick_with_captures": capture_res.summarize(),
+                                "tick_bootstrap_seed": bootstrap_res.summarize(),
                             },
                         })
                         kill_bench_sessions(ssh, fixture)
