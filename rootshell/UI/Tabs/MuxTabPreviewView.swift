@@ -188,10 +188,10 @@ final class MuxTabPreviewView: UIView {
                 preview.writtenGrid = gridKey
                 preview.placeholder?.removeFromSuperlayer()
                 preview.placeholder = nil
-                // Instrumentation only: ends the feed's "time to first tile"
-                // signpost the first time any tile actually paints.
-                // Idempotent -- cheap to call on every write thereafter.
-                feed?.noteFirstTilePainted()
+                // Instrumentation only: reports that this pane is now
+                // visible to the user, which is what "time to first tile" and
+                // "time to all tiles" measure. Idempotent per pane.
+                feed?.notePanePainted(pane.id)
             } else if preview.writtenRevision == nil {
                 ensurePlaceholder(preview)
             }

@@ -62,9 +62,14 @@ final class MultiplexerExposeFeed {
     private lazy var signpostID: OSSignpostID = MuxExposeSignposts.id(for: self)
     private var sessionOpenedAt: CFTimeInterval?
     private var firstTileSignpostState: OSSignpostIntervalState?
+    private var allFramesSignpostState: OSSignpostIntervalState?
     private var allTilesSignpostState: OSSignpostIntervalState?
     private var firstTilePainted = false
+    private var allFramesArrived = false
     private var allTilesPainted = false
+    /// Panes that have actually painted, as reported by the preview view.
+    /// `frames` says the data arrived; this says the user can see it.
+    private var paintedPanes: Set<String> = []
 
     private static let baseInterval: TimeInterval = 0.4
     private static let maxInterval: TimeInterval = 2.5
@@ -282,6 +287,7 @@ final class MultiplexerExposeFeed {
         loop = nil
         sleeper?.cancel()
         sleeper = nil
+        endOpenSessionIntervals()
     }
 
     private func cancelFocus() {
@@ -505,24 +511,66 @@ final class MultiplexerExposeFeed {
     /// Starts the "time to first tile" / "time to all tiles" signposts for a
     /// freshly (re)started exposé session.
     private func markSessionOpened() {
+        // Intervals share one `.exclusive` lane per id, so a previous session
+        // that ended without every tile painting must be closed out first --
+        // otherwise the new begin overlaps an unterminated interval.
+        endOpenSessionIntervals()
         sessionOpenedAt = CACurrentMediaTime()
         firstTilePainted = false
+        allFramesArrived = false
         allTilesPainted = false
+        paintedPanes.removeAll(keepingCapacity: true)
         firstTileSignpostState = MuxExposeSignposts.signposter.beginInterval("timeToFirstTile", id: signpostID)
+        allFramesSignpostState = MuxExposeSignposts.signposter.beginInterval("timeToAllFrames", id: signpostID)
         allTilesSignpostState = MuxExposeSignposts.signposter.beginInterval("timeToAllTiles", id: signpostID)
+    }
+
+    /// Terminates any interval still open, so an exposé closed early does not
+    /// leave an unterminated interval in the trace. Safe to call repeatedly.
+    private func endOpenSessionIntervals() {
+        if let state = firstTileSignpostState {
+            MuxExposeSignposts.signposter.endInterval("timeToFirstTile", state, "abandoned=true")
+            firstTileSignpostState = nil
+        }
+        if let state = allFramesSignpostState {
+            MuxExposeSignposts.signposter.endInterval("timeToAllFrames", state, "abandoned=true")
+            allFramesSignpostState = nil
+        }
+        if let state = allTilesSignpostState {
+            MuxExposeSignposts.signposter.endInterval("timeToAllTiles", state, "abandoned=true")
+            allTilesSignpostState = nil
+        }
     }
 
     /// Called by the preview view the first time it paints a frame for this
     /// feed's session -- the user-facing "time to first tile" headline
     /// number. Idempotent per session.
-    func noteFirstTilePainted() {
-        guard !firstTilePainted else { return }
-        firstTilePainted = true
-        guard let sessionOpenedAt, let firstTileSignpostState else { return }
+    func notePanePainted(_ paneID: String) {
+        if !firstTilePainted {
+            firstTilePainted = true
+            if let sessionOpenedAt, let firstTileSignpostState {
+                let elapsedMs = Int((CACurrentMediaTime() - sessionOpenedAt) * 1000)
+                MuxExposeSignposts.signposter.endInterval(
+                    "timeToFirstTile", firstTileSignpostState, "elapsedMs=\(elapsedMs)"
+                )
+                self.firstTileSignpostState = nil
+                Self.logger.info("time to first tile: \(elapsedMs)ms")
+            }
+        }
+        guard !allTilesPainted else { return }
+        paintedPanes.insert(paneID)
+        // Only panes the tray actually mirrors can paint, so an off-screen tab
+        // must not hold this open forever: require every previewable pane that
+        // is currently visible to have painted.
+        guard let snapshot else { return }
+        let awaited = snapshot.allPanes.filter { $0.isPreviewable && visiblePanes.contains($0.id) }
+        guard !awaited.isEmpty, awaited.allSatisfy({ paintedPanes.contains($0.id) }) else { return }
+        allTilesPainted = true
+        guard let sessionOpenedAt, let allTilesSignpostState else { return }
         let elapsedMs = Int((CACurrentMediaTime() - sessionOpenedAt) * 1000)
-        MuxExposeSignposts.signposter.endInterval("timeToFirstTile", firstTileSignpostState, "elapsedMs=\(elapsedMs)")
-        self.firstTileSignpostState = nil
-        Self.logger.info("time to first tile: \(elapsedMs)ms")
+        MuxExposeSignposts.signposter.endInterval("timeToAllTiles", allTilesSignpostState, "elapsedMs=\(elapsedMs)")
+        self.allTilesSignpostState = nil
+        Self.logger.info("time to all visible tiles painted: \(elapsedMs)ms (\(awaited.count) panes)")
     }
 
     /// Checks whether every previewable pane now has a frame, and if so
@@ -530,15 +578,15 @@ final class MultiplexerExposeFeed {
     /// user's actual complaint ("show all zmx tabs"), which nothing measured
     /// before this. Cheap: the pane scan only runs until it fires once, then
     /// this is a single bool check for the rest of the session.
-    private func markAllTilesPaintedIfNeeded(_ snapshot: MuxExposeSnapshot) {
-        guard !allTilesPainted else { return }
+    private func markAllFramesArrivedIfNeeded(_ snapshot: MuxExposeSnapshot) {
+        guard !allFramesArrived else { return }
         guard snapshot.allPanes.allSatisfy({ !$0.isPreviewable || frames[$0.id] != nil }) else { return }
-        allTilesPainted = true
-        guard let sessionOpenedAt, let allTilesSignpostState else { return }
+        allFramesArrived = true
+        guard let sessionOpenedAt, let allFramesSignpostState else { return }
         let elapsedMs = Int((CACurrentMediaTime() - sessionOpenedAt) * 1000)
-        MuxExposeSignposts.signposter.endInterval("timeToAllTiles", allTilesSignpostState, "elapsedMs=\(elapsedMs)")
-        self.allTilesSignpostState = nil
-        Self.logger.info("time to all tiles: \(elapsedMs)ms")
+        MuxExposeSignposts.signposter.endInterval("timeToAllFrames", allFramesSignpostState, "elapsedMs=\(elapsedMs)")
+        self.allFramesSignpostState = nil
+        Self.logger.info("time to all frames fetched: \(elapsedMs)ms")
     }
 
     /// Clears mouse tracking before a passthrough switch.
@@ -1089,7 +1137,9 @@ final class MultiplexerExposeFeed {
         }
         guard let result else {
             // Instrumentation only.
-            tickTruncated = MuxScript.sections(of: output, nonce: nonce).truncated
+            if MuxExposeSignposts.signposter.isEnabled {
+                tickTruncated = MuxScript.sections(of: output, nonce: nonce).truncated
+            }
             // Only the prelude's own verdict is final. Anything else (a
             // half-written reply, a momentarily unavailable server) is a
             // transient failure worth retrying, and never throws away a
@@ -1136,7 +1186,7 @@ final class MultiplexerExposeFeed {
         // Panes that vanished take their frames with them.
         let live = Set(result.snapshot.allPanes.map(\.id))
         frames = frames.filter { live.contains($0.key) }
-        markAllTilesPaintedIfNeeded(result.snapshot)
+        markAllFramesArrivedIfNeeded(result.snapshot)
 
         let topologyChanged = result.snapshot != snapshot
         snapshot = result.snapshot

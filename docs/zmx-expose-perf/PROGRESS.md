@@ -97,7 +97,7 @@ xcodebuild build -project rootshell.xcodeproj -scheme rootshell-Standalone \
       which rootless podman may deny — fall back to a host TCP delay proxy.
 - [ ] **B3** Seed sessions with realistic coloured scrollback (empty shells
       produce unrealistically tiny captures)
-- [ ] **I1** Add instrumentation to the MuxExpose path (signposts + structured
+- [x] **I1** Add instrumentation to the MuxExpose path (signposts + structured
       timing covering detect / resolveSession / each tick / parse / render)
 - [ ] **M1** Capture and record the BASELINE numbers in `BASELINE.md`
 - [ ] **T1** Implement Track 1 changes *justified by the baseline data only*
@@ -106,6 +106,49 @@ xcodebuild build -project rootshell.xcodeproj -scheme rootshell-Standalone \
 
 ## Status log
 
+- 2026-09-08 (later): I1 instrumentation merged and corrected (see above).
+  Build green. Benchmark harness (B1-B3) still in progress.
 - 2026-09-08: Rebase complete and pushed. Fixture rebuilt on zmx v0.8.1.
   Explorations complete (client-side + zmx-side). Scope set. Nothing
   benchmarked yet — no baseline exists, so no perf change may be made yet.
+
+## Instrumentation reference (I1, done)
+
+`rootshell/Core/Diagnostics/MuxExposeSignposts.swift` — subsystem
+`com.rootshell`, category `MuxExpose` (same category the existing `Logger`
+uses). View in Instruments' os_signpost track, or:
+
+```sh
+log stream --predicate 'subsystem == "com.rootshell" AND category == "MuxExpose"' --info
+```
+
+Intervals: `timeToFirstTile`, `timeToAllFrames`, `timeToAllTiles`, `detect`
+(`forced=`/`skipped=`), `resolveSession`, `tick`
+(`panes=`/`bytes=`/`truncated=`/`timedOut=`), `parseTick`,
+`tile.surfaceCreate`, `tile.writeFrame` (`bytes=`).
+Events: `resolveSession.skipped`, `tick.pace` (`immediate` or `wait=`).
+
+**Three metrics, deliberately distinct — do not conflate them:**
+- `timeToFirstTile` — open until the first pane actually paints.
+- `timeToAllFrames` — open until every previewable pane has capture *data*.
+  Measures the network/remote half only.
+- `timeToAllTiles` — open until every *currently visible* previewable pane has
+  painted. Measures what the user actually experiences. Scoped to visible
+  panes because off-screen tabs never create a surface (the tray only mirrors
+  cells intersecting visible bounds), so an all-panes definition would never
+  fire.
+
+The gap between `timeToAllFrames` and `timeToAllTiles` is the render cost;
+the gap between open and `timeToAllFrames` is the fetch cost. That split is
+the point — it decides whether Track 1 should target round trips or rendering.
+
+### Review corrections applied on top of the agent's commit
+1. Its `timeToAllTiles` actually measured frame *arrival*, not paint, and so
+   under-reported the user-visible number. Split into `timeToAllFrames`
+   (arrival) and a genuinely paint-based `timeToAllTiles`.
+2. Intervals begun in `start()` were never terminated when an exposé closed
+   before completing, leaving unterminated intervals and overlapping begins on
+   one `.exclusive` lane. Added `endOpenSessionIntervals()`, called from both
+   `markSessionOpened()` and `teardownLoop()`, tagging them `abandoned=true`.
+3. The truncation re-parse on the unparseable-reply path ran even when nothing
+   was tracing; now guarded by `signposter.isEnabled`.
