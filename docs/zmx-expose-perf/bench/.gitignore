@@ -1,0 +1,9 @@
+# Sweep output (results.json / results.tsv / summary.txt per run). Numbers
+# from one machine at one point in time aren't meant to be checked in here;
+# copy specific results into BASELINE.md / RESULTS.md (see PROGRESS.md)
+# instead when they're worth keeping.
+results/*
+!results/.gitkeep
+
+__pycache__/
+*.pyc
