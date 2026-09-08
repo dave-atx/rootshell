@@ -1,0 +1,27 @@
+# Sync manifest for docs/zmx-expose-perf/bench/lib/mux_scripts.py.
+#
+# mux_scripts.py reproduces (does not import) the exact shell text that
+# rootshell's Swift sources build for the zmx exposé tick, resolveSession
+# and detect scripts. Reproduction instead of import is deliberate: the
+# harness must build and run headlessly with no Xcode project, and these
+# functions pull in app-wide types (LoginShellCommand, SSHConfig,
+# TerminalIdentity, ...) that only compile inside the full app target.
+#
+# Faithfulness is enforced instead of assumed: each row below is a
+# `path:start:end:sha256` pin over the exact Swift source lines that
+# mux_scripts.py's comments say they transcribe. check-sync.sh recomputes
+# each hash and fails loudly on any mismatch. When a listed range
+# legitimately changes, re-read it, update the corresponding function in
+# mux_scripts.py to match, then regenerate this file's hash with:
+#   sed -n 'START,ENDp' FILE | shasum -a 256
+#
+# format: relative-path:start-line:end-line:sha256
+
+rootshell/Features/Multiplexer/Expose/ZmxExposeAdapter.swift:11:47:dd4d9db528adaa543b48640b3853c149ec18c10393cf995a25e9e0f9c5ef417c
+rootshell/Features/Multiplexer/Expose/MultiplexerExposeAdapter.swift:101:133:a6350082220318d275ad21a3eff3a54259273fc9f51d49ad4b5c56eb090b2578
+rootshell/Core/Shell/LoginShellCommand.swift:9:79:ec8bfb6a79902c5b6632a952b72ba7d2340702d0f99d477a46fe22b99d187ca5
+rootshell/Features/Multiplexer/Expose/MultiplexerExposeFeed.swift:732:969:2a07a2a4fc6f745a2998052c006d3c041d532d3d672c4d5fb6635abaf78f8eff
+rootshell/Features/Multiplexer/Expose/MultiplexerExposeFeed.swift:1074:1086:5621f935f74511fb557a2ab8e32fb5546f1868b9998cb56f636d8b7d0fd1f774
+rootshell/Features/Multiplexer/Expose/MultiplexerExposeFeed.swift:1269:1271:761a1fe2f00698956453a4c226169f602164be189d2b4056deff5539c3c4c263
+rootshell/Features/Multiplexer/Expose/TmuxExposeAdapter.swift:18:18:32425c3614648bae74abf186d357c7d332e864aa1adae5c4b8149624431033d0
+rootshell/Core/Terminal/TerminalIdentity.swift:49:49:99e5960411c63d68391005c787fb760da3eca60425c789aae28f3e7e96c6359f
