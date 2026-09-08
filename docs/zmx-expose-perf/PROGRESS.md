@@ -106,8 +106,15 @@ xcodebuild build -project rootshell.xcodeproj -scheme rootshell-Standalone \
       around by chunking, not investigated further (zmx pinned read-only).
 - [x] **I1** Add instrumentation to the MuxExpose path (signposts + structured
       timing covering detect / resolveSession / each tick / parse / render)
-- [ ] **M1** Capture and record the BASELINE numbers in `BASELINE.md`
-- [ ] **T1** Implement Track 1 changes *justified by the baseline data only*
+- [x] **M1** Capture and record the BASELINE numbers in `BASELINE.md`
+- [ ] **T1** Implement Track 1 changes *justified by the baseline data only*.
+      The data says: cut ROUND TRIPS in the cold-start path. Specifically
+      (a) skip `detect()` when the binding is still live — `:170` forces it for
+      zmx on every open; (b) fold `resolveSession()` into the first tick, whose
+      script already runs `zmx list`; (c) let the first tick fetch captures
+      instead of topology-then-captures. Each saves ~1 RTT of the 4.
+      Do NOT touch the fetchCap ramp: truncation never fires at any tested
+      scale (191KB at 24 sessions vs a 512KB cap).
 - [ ] **V1** Re-benchmark; prove faster + no regressions; record in `RESULTS.md`
 - [ ] **V2** One end-to-end XCUITest run as whole-system confirmation
 
@@ -120,6 +127,11 @@ xcodebuild build -project rootshell.xcodeproj -scheme rootshell-Standalone \
   for the full picture, including what's verified vs. untested. Only a
   `--quick` smoke sweep and one small custom sweep have actually been run;
   the full baseline sweep (M1) has not — that's next.
+- 2026-09-08 (latest): Clean baseline captured in BASELINE.md. Two earlier
+  invalid runs discarded — a delay-proxy pipelining bug and 290 fixture
+  zombies; both root-caused and fixed, see BASELINE.md. Conclusion: round
+  trips in cold start dominate; payload and the fetchCap ramp are irrelevant
+  at every tested scale.
 - 2026-09-08 (later): I1 instrumentation merged and corrected (see above).
   Build green. Benchmark harness (B1-B3) still in progress.
 - 2026-09-08: Rebase complete and pushed. Fixture rebuilt on zmx v0.8.1.

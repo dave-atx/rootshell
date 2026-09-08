@@ -29,18 +29,51 @@ import sys
 
 
 async def _pump(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, delay_s: float) -> None:
+    """Relays one direction, holding every chunk for `delay_s` before writing it.
+
+    The delay is applied to each chunk INDEPENDENTLY and the reader keeps
+    reading while earlier chunks are still being held, so a stream of N chunks
+    costs delay_s once, not N times. That is what a real link does: packets are
+    delayed but they pipeline. An earlier version of this proxy slept inline in
+    the read loop (read -> sleep -> write -> read), which serialised the hops
+    and charged N * delay_s. That massively inflated any phase whose output
+    dribbles out over time -- `detect()` emits output gradually across many
+    `ps`/`lsof` calls, so it was penalised roughly 7x more than a capture tick
+    returning the same number of bytes in one burst. Do not reintroduce an
+    inline sleep here; it silently turns the benchmark into fiction.
+    """
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def _drain_queue() -> None:
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            deadline, data = item
+            remaining = deadline - loop.time()
+            if remaining > 0:
+                await asyncio.sleep(remaining)
+            writer.write(data)
+            await writer.drain()
+
+    drainer = asyncio.ensure_future(_drain_queue())
     try:
         while True:
             data = await reader.read(65536)
             if not data:
                 break
-            if delay_s > 0:
-                await asyncio.sleep(delay_s)
-            writer.write(data)
-            await writer.drain()
+            # Deadline is stamped at ARRIVAL, so held chunks overlap instead of
+            # queueing behind each other.
+            queue.put_nowait((loop.time() + delay_s, data))
     except (ConnectionResetError, BrokenPipeError, OSError):
         pass
     finally:
+        queue.put_nowait(None)
+        try:
+            await drainer
+        except (ConnectionResetError, BrokenPipeError, OSError):
+            pass
         writer.close()
 
 

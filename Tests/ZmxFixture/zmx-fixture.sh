@@ -290,7 +290,17 @@ start_fixture() {
     fixture_container_name=$fixture_prefix-container
 
     build_image
+    # --init gives the container a real init as PID 1 that reaps orphans.
+    # Without it PID 1 is `sleep infinity`, which never wait()s, so every torn
+    # down zmx session leaves a `[zmx] <defunct>` zombie behind. Those zombies
+    # are owned by the fixture account, so they are invisible to a root
+    # `podman exec ps -x` but fully visible to the SSH session -- and rootshell's
+    # detect() probe treats each one as a live multiplexer candidate and runs
+    # lsof plus /proc scans against it. A few hundred accumulated zombies took
+    # detect() from well under a second to ~3.8s, silently contaminating any
+    # benchmark run against a long-lived fixture.
     fixture_container_id=$(run_podman run --detach \
+        --init \
         --name "$fixture_container_name" \
         --publish "$fixture_host::22" \
         "$fixture_image" \

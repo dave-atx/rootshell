@@ -364,8 +364,47 @@ def run_phase(ssh: SSHTarget, build_script, reps: int, response_cap: int) -> Pha
 # Sweep
 # ---------------------------------------------------------------------------
 
+def check_fixture_clean(fixture, *, limit: int = 20) -> int:
+    """Counts zombie processes in the fixture container.
+
+    This exists because a polluted fixture silently corrupts every number this
+    harness produces. The fixture's PID 1 used to be `sleep infinity`, which
+    never wait()s, so each torn-down zmx session left a `[zmx] <defunct>`
+    zombie. rootshell's detect() probe matches candidates with
+    `ps ... | grep -E "tmux|herdr|zellij|zmx"`, and a zombie still carries the
+    name -- so every corpse became a candidate that detect() then ran `_walk`,
+    `lsof`, and `/proc/net/unix` scans against. ~290 accumulated zombies took
+    detect() from sub-second to ~3.8s, and because they build up DURING a
+    sweep, they masquerade as "detect scales with session count".
+
+    Note the zombies belong to the fixture account, so a root
+    `podman exec ... ps -x` shows nothing. `ps -eo` is required to see them.
+    """
+    proc = subprocess.run(
+        ["podman", "exec", fixture.container_id, "sh", "-c",
+         "ps -eo stat=,args= | grep -c 'defunct'"],
+        capture_output=True, text=True,
+    )
+    try:
+        zombies = int((proc.stdout or "0").strip())
+    except ValueError:
+        zombies = 0
+    if zombies > limit:
+        raise SystemExit(
+            f"run_bench: fixture has {zombies} zombie processes (limit {limit}).\n"
+            f"  Numbers from this fixture would be meaningless -- detect() counts\n"
+            f"  each zombie as a live multiplexer candidate.\n"
+            f"  Restart it:  Tests/ZmxFixture/zmx-fixture.sh stop {fixture.state_dir}\n"
+            f"               Tests/ZmxFixture/zmx-fixture.sh start --env-file ...\n"
+            f"  The fixture now runs the container with --init so PID 1 reaps;\n"
+            f"  a container started before that change will keep leaking."
+        )
+    return zombies
+
+
 def run_sweep(args: argparse.Namespace) -> dict:
     fixture = load_fixture_env(Path(args.env_file))
+    zombies_before = check_fixture_clean(fixture)
     work_dir = Path(tempfile.mkdtemp(prefix="zmxb-"))
     netem_checked: dict = {}
     report = {
@@ -375,6 +414,7 @@ def run_sweep(args: argparse.Namespace) -> dict:
         "seed_lines": args.seed_lines,
         "reps": args.reps,
         "sessions_sweep": args.sessions,
+        "zombies_before": zombies_before,
         "latencies_ms": args.latencies,
         "configs": [],
     }
