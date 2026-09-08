@@ -36,9 +36,24 @@ Fixture restarted with `--init` immediately before the run; `zombies_before=2`.
 ## What the data says
 
 1. **Every phase costs about one round trip.** Each gains ~85ms at 30ms and
-   ~200ms at 80ms, uniformly. Cold start is `detect` → `resolveSession` →
-   topology tick → capture tick = **4 sequential execs**. At 80ms RTT that is
-   ~890ms before the last tile can paint, and ~640ms of it is pure latency.
+   ~200ms at 80ms, uniformly.
+
+   **CORRECTION (was wrong in the first version of this file).** This section
+   originally said cold start was `detect` → `resolveSession` → topology tick
+   → capture tick = 4 sequential execs, ~890ms at 80ms RTT. That is wrong for
+   the **cached zmx binding** path, which is the common one.
+   `resolveSession()` never runs there: `bindPassthroughMultiplexer` takes a
+   non-optional `sessionName: String`
+   (`rootshell/UI/Terminal/TerminalView+Session.swift:581`), so a zmx binding
+   always carries a name and `run()`'s `if sessionName == nil` gate at `:698`
+   is never true. The 4-exec figure describes the general framework — tmux and
+   zellij *can* have a nil session name and *do* call `resolveSession()` — and
+   I generalised it to zmx without checking that invariant.
+
+   The real cached-zmx cold start was **3 sequential execs** (`detect` →
+   topology tick → capture tick): ~720ms at 80ms RTT with 10 sessions, not
+   ~890ms. The conclusion (round trips dominate; cut them) is unchanged, but
+   the headline saving is smaller than the original framing implied.
 
 2. **Payload is a non-issue at any plausible scale.** 24 sessions is 191KB
    against a 512KB `responseCap`; `would_exceed_cap` is False for every row in
