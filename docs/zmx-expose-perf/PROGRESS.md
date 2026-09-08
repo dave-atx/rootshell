@@ -123,7 +123,15 @@ xcodebuild build -project rootshell.xcodeproj -scheme rootshell-Standalone \
       3 execs -> 1 (1 session) or 2 (N>1 sessions). Saves 64-81% at 1
       session and 37-54% at N>1, across 0/30/80ms -- holds at every tested
       latency and session count.
-- [ ] **V2** One end-to-end XCUITest run as whole-system confirmation. NOT
+- [ ] **V2** One end-to-end XCUITest run as whole-system confirmation.
+      BLOCKED, deliberately. The relevant test is
+      `testDetachThenTabExposeReturnsToLocal` — exactly the detach path this
+      change alters — but `scripts/test-macos-ui-local.sh` ad-hoc-signs the
+      build and resets host TCC/LaunchServices state. The user's standing rule
+      is never to ad-hoc sign or strip entitlements, so this must NOT be run
+      via that script without asking. Running it under the paid-team dev
+      signing config instead is possible but also resets host state — ask
+      first.. NOT
       run: the existing `testDetachThenTabExposeReturnsToLocal` (attach,
       expose, detach, expose again, expect local + no stale cell) is exactly
       this, but it runs through `scripts/test-macos-ui-local.sh`, which
@@ -203,3 +211,21 @@ the point — it decides whether Track 1 should target round trips or rendering.
    `markSessionOpened()` and `teardownLoop()`, tagging them `abandoned=true`.
 3. The truncation re-parse on the unparseable-reply path ran even when nothing
    was tracing; now guarded by `signposter.isEnabled`.
+
+## Result (T1, done and independently verified)
+
+`66abe9f` — skip the forced `detect()` revalidation when a cached zmx binding
+already has a session name; let the first tick's own `zmx list` supply the
+liveness proof (`boundSessionIsUnavailable` = session missing OR
+`clients == 0`, so a detached session is still caught, reaching the same
+`.unsupported` + `clearCurrentPassthroughBinding()` end state). Seed that first
+tick with the known session name, and only force a follow-up tick when a pane
+still lacks a frame. Gated to zmx; tmux/zellij/herdr unchanged.
+
+Cached-zmx cold start: **3 execs -> 1** (single session) or **2** (N>1).
+Full numbers in `RESULTS.md`; independent re-run in
+`bench/results/verify-coldstart/`.
+
+Gates verified by hand after the merge: Catalyst BUILD SUCCEEDED, ZmxLogic
+11/11, LoginShellLogic 20/20, zmx-expose-checks ALL CHECKS PASSED (33
+sections), check-sync all 8 rows.
