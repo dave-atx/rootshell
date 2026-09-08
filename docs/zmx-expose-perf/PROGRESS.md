@@ -90,13 +90,20 @@ xcodebuild build -project rootshell.xcodeproj -scheme rootshell-Standalone \
 - [x] Rebase `fork-tests` onto upstream/main; push to origin (done, 7418703)
 - [x] Confirm zmx checkout is v0.8.1 and fixture builds from it
 - [x] Fixture starts and is reachable over real SSH
-- [ ] **B1** Build script-level benchmark harness (real SSH → fixture, runs the
+- [x] **B1** Build script-level benchmark harness (real SSH → fixture, runs the
       real `tickScript`, sweeps session count × latency, reports per-phase wall
-      time and byte counts)
-- [ ] **B2** Add host-side latency injection (0/30/80ms). netem needs NET_ADMIN
+      time and byte counts) — `docs/zmx-expose-perf/bench/`, see its README.
+- [x] **B2** Add host-side latency injection (0/30/80ms). netem needs NET_ADMIN
       which rootless podman may deny — fall back to a host TCP delay proxy.
-- [ ] **B3** Seed sessions with realistic coloured scrollback (empty shells
-      produce unrealistically tiny captures)
+      Turned out netem fails for a different reason on this dev machine: the
+      podman machine kernel has no `sch_netem` module at all (NET_ADMIN itself
+      *is* granted). `netem/delay_proxy.py` is the fallback in actual use;
+      the netem success path is implemented but unverified. See bench README.
+- [x] **B3** Seed sessions with realistic coloured scrollback (empty shells
+      produce unrealistically tiny captures) — `lib/gen_content.py`. Found
+      along the way: a single `zmx print` over ~4089 bytes silently fails on
+      zmx v0.8.1 (session stays at a bare prompt, exit 0, no error);  worked
+      around by chunking, not investigated further (zmx pinned read-only).
 - [x] **I1** Add instrumentation to the MuxExpose path (signposts + structured
       timing covering detect / resolveSession / each tick / parse / render)
 - [ ] **M1** Capture and record the BASELINE numbers in `BASELINE.md`
@@ -106,6 +113,13 @@ xcodebuild build -project rootshell.xcodeproj -scheme rootshell-Standalone \
 
 ## Status log
 
+- 2026-09-08 (latest): B1-B3 done — `docs/zmx-expose-perf/bench/` (script-
+  level harness over real SSH, transcribed-and-sync-checked scripts,
+  realistic seeded content, latency injection with a verified fallback
+  proxy since netem is unreachable on this dev machine). See its README
+  for the full picture, including what's verified vs. untested. Only a
+  `--quick` smoke sweep and one small custom sweep have actually been run;
+  the full baseline sweep (M1) has not — that's next.
 - 2026-09-08 (later): I1 instrumentation merged and corrected (see above).
   Build green. Benchmark harness (B1-B3) still in progress.
 - 2026-09-08: Rebase complete and pushed. Fixture rebuilt on zmx v0.8.1.
