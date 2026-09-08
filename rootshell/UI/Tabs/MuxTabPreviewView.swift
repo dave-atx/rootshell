@@ -11,6 +11,7 @@
 //
 
 import UIKit
+import os
 
 @MainActor
 final class MuxTabPreviewView: UIView {
@@ -177,11 +178,20 @@ final class MuxTabPreviewView: UIView {
             }
             if gridIsSettled, fits, let latest = feed?.frame(for: pane.id),
                latest.revision != preview.writtenRevision || gridKey != preview.writtenGrid {
+                let writeSignpostID = MuxExposeSignposts.id(for: preview)
+                let writeState = MuxExposeSignposts.signposter.beginInterval(
+                    "tile.writeFrame", id: writeSignpostID, "bytes=\(latest.ansi.utf8.count)"
+                )
                 surface.writeFrame(latest.ansi, cursor: latest.cursor.map { ($0.x, $0.y, $0.visible) })
+                MuxExposeSignposts.signposter.endInterval("tile.writeFrame", writeState)
                 preview.writtenRevision = latest.revision
                 preview.writtenGrid = gridKey
                 preview.placeholder?.removeFromSuperlayer()
                 preview.placeholder = nil
+                // Instrumentation only: ends the feed's "time to first tile"
+                // signpost the first time any tile actually paints.
+                // Idempotent -- cheap to call on every write thereafter.
+                feed?.noteFirstTilePainted()
             } else if preview.writtenRevision == nil {
                 ensurePlaceholder(preview)
             }
@@ -208,6 +218,9 @@ final class MuxTabPreviewView: UIView {
     }
 
     private func makeSurface(_ preview: PanePreview) -> Ghostty.TmuxPreviewView? {
+        let signpostID = MuxExposeSignposts.id(for: preview)
+        let state = MuxExposeSignposts.signposter.beginInterval("tile.surfaceCreate", id: signpostID)
+        defer { MuxExposeSignposts.signposter.endInterval("tile.surfaceCreate", state) }
         guard let app = feed?.ghosttyApp else { return nil }
         let surface = Ghostty.TmuxPreviewView(ghosttyApp: app)
         surface.layer.anchorPoint = .zero

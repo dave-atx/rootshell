@@ -55,6 +55,17 @@ final class MultiplexerExposeFeed {
     private var cache: (owner: ObjectIdentifier, session: String, snapshot: MuxExposeSnapshot,
                         frames: [String: MuxPaneFrame], at: CFTimeInterval)?
 
+    // MARK: - Instrumentation (measurement only; no behavioral effect)
+
+    /// Stable per-feed signpost correlation id, derived from this instance's
+    /// own identity so concurrent feeds don't collide on one shared lane.
+    private lazy var signpostID: OSSignpostID = MuxExposeSignposts.id(for: self)
+    private var sessionOpenedAt: CFTimeInterval?
+    private var firstTileSignpostState: OSSignpostIntervalState?
+    private var allTilesSignpostState: OSSignpostIntervalState?
+    private var firstTilePainted = false
+    private var allTilesPainted = false
+
     private static let baseInterval: TimeInterval = 0.4
     private static let maxInterval: TimeInterval = 2.5
     private static let hiddenPaneEveryNthTick = 3
@@ -178,6 +189,7 @@ final class MultiplexerExposeFeed {
         }
         cancelFocus()
         teardownLoop()
+        markSessionOpened()
 
         self.terminal = terminal
         resetSession()
@@ -488,6 +500,47 @@ final class MultiplexerExposeFeed {
         sleeper?.cancel()
     }
 
+    // MARK: - Instrumentation (measurement only; no behavioral effect)
+
+    /// Starts the "time to first tile" / "time to all tiles" signposts for a
+    /// freshly (re)started exposé session.
+    private func markSessionOpened() {
+        sessionOpenedAt = CACurrentMediaTime()
+        firstTilePainted = false
+        allTilesPainted = false
+        firstTileSignpostState = MuxExposeSignposts.signposter.beginInterval("timeToFirstTile", id: signpostID)
+        allTilesSignpostState = MuxExposeSignposts.signposter.beginInterval("timeToAllTiles", id: signpostID)
+    }
+
+    /// Called by the preview view the first time it paints a frame for this
+    /// feed's session -- the user-facing "time to first tile" headline
+    /// number. Idempotent per session.
+    func noteFirstTilePainted() {
+        guard !firstTilePainted else { return }
+        firstTilePainted = true
+        guard let sessionOpenedAt, let firstTileSignpostState else { return }
+        let elapsedMs = Int((CACurrentMediaTime() - sessionOpenedAt) * 1000)
+        MuxExposeSignposts.signposter.endInterval("timeToFirstTile", firstTileSignpostState, "elapsedMs=\(elapsedMs)")
+        self.firstTileSignpostState = nil
+        Self.logger.info("time to first tile: \(elapsedMs)ms")
+    }
+
+    /// Checks whether every previewable pane now has a frame, and if so
+    /// closes out the "time to all tiles" signpost once per session -- the
+    /// user's actual complaint ("show all zmx tabs"), which nothing measured
+    /// before this. Cheap: the pane scan only runs until it fires once, then
+    /// this is a single bool check for the rest of the session.
+    private func markAllTilesPaintedIfNeeded(_ snapshot: MuxExposeSnapshot) {
+        guard !allTilesPainted else { return }
+        guard snapshot.allPanes.allSatisfy({ !$0.isPreviewable || frames[$0.id] != nil }) else { return }
+        allTilesPainted = true
+        guard let sessionOpenedAt, let allTilesSignpostState else { return }
+        let elapsedMs = Int((CACurrentMediaTime() - sessionOpenedAt) * 1000)
+        MuxExposeSignposts.signposter.endInterval("timeToAllTiles", allTilesSignpostState, "elapsedMs=\(elapsedMs)")
+        self.allTilesSignpostState = nil
+        Self.logger.info("time to all tiles: \(elapsedMs)ms")
+    }
+
     /// Clears mouse tracking before a passthrough switch.
     private func prepareForPassthroughSwitch(_ terminal: Ghostty.TerminalView) {
         guard type == .zmx else { return }
@@ -584,6 +637,11 @@ final class MultiplexerExposeFeed {
             }
             sessionName = resolved
             onChange?()
+        } else {
+            // Instrumentation only: makes it visible in the trace that
+            // resolveSession did not run this pass (the session was already
+            // named), rather than leaving a gap that looks like a miss.
+            MuxExposeSignposts.signposter.emitEvent("resolveSession.skipped", id: signpostID)
         }
         while true {
             let outcome = await tick(generation: generation)
@@ -595,8 +653,10 @@ final class MultiplexerExposeFeed {
                 giveUp("tick: session no longer usable")
                 return
             case .immediate:
+                MuxExposeSignposts.signposter.emitEvent("tick.pace", id: signpostID, "immediate")
                 continue
             case .wait(let seconds):
+                MuxExposeSignposts.signposter.emitEvent("tick.pace", id: signpostID, "wait=\(seconds)")
                 let sleeper = Task<Void, Never> { try? await Task.sleep(for: .seconds(seconds)) }
                 self.sleeper = sleeper
                 await sleeper.value
@@ -622,11 +682,24 @@ final class MultiplexerExposeFeed {
     /// tied to this pane by its session socket and by ancestry instead.
     /// (id=zmx-passthrough-detect)
     private func detect() async -> Ghostty.TerminalView.RawMultiplexerBinding? {
+        // Instrumentation only: "forced" mirrors the revalidation this run
+        // was started for (a cached zmx binding re-checked on every open,
+        // per docs/zmx-expose-perf/PROGRESS.md); "skipped" flips true when
+        // the negative-cooldown short-circuit below fires without a probe.
+        let detectForced = validatingZmxBinding
+        let detectSignpostState = MuxExposeSignposts.signposter.beginInterval(
+            "detect", id: signpostID, "forced=\(detectForced)"
+        )
+        var detectSkipped = false
+        defer {
+            MuxExposeSignposts.signposter.endInterval("detect", detectSignpostState, "skipped=\(detectSkipped)")
+        }
         guard let terminal else { return nil }
         detectionWasConclusive = false
         let altActive = Self.isAlternateScreenActive(terminal)
         if !altActive, let last = negativeDetectAt[ObjectIdentifier(terminal)],
            CACurrentMediaTime() - last < Self.negativeProbeCooldown {
+            detectSkipped = true
             return nil
         }
         // Scoped to the alt-inactive branch only: tmux/zellij/herdr were
@@ -951,6 +1024,8 @@ final class MultiplexerExposeFeed {
     /// The session name when the host runs exactly one; nil leaves the feed
     /// unusable rather than guessing (the caller applies the result).
     private func resolveSession() async -> String? {
+        let state = MuxExposeSignposts.signposter.beginInterval("resolveSession", id: signpostID)
+        defer { MuxExposeSignposts.signposter.endInterval("resolveSession", state) }
         guard let terminal, let adapter else { return nil }
         let nonce = Self.nonce()
         guard let output = try? await RemoteExecProbe.run(
@@ -976,19 +1051,45 @@ final class MultiplexerExposeFeed {
         let request = MuxTickRequest(fetch: fetchList(now: now), knownRevisions: frames.mapValues(\.revision))
         let nonce = Self.nonce()
         let script = adapter.tickScript(session: sessionName, request: request, nonce: nonce)
+        // Instrumentation only: begin/end wraps the whole tick, metadata
+        // reports what the tick actually cost -- panes asked for, bytes
+        // back, and whether it was truncated or timed out.
+        let panesRequested = request.fetch.count
+        let tickSignpostState = MuxExposeSignposts.signposter.beginInterval(
+            "tick", id: signpostID, "panes=\(panesRequested)"
+        )
+        var replyBytes = 0
+        var tickTruncated = false
+        var tickTimedOut = false
+        defer {
+            MuxExposeSignposts.signposter.endInterval(
+                "tick", tickSignpostState,
+                "bytes=\(replyBytes) truncated=\(tickTruncated) timedOut=\(tickTimedOut)"
+            )
+        }
         let output: String
         do {
             output = try await RemoteExecProbe.run(script, on: terminal, timeout: Self.tickTimeout, maxResponseBytes: Self.responseCap)
         } catch RemoteExecProbe.ProbeError.busy {
             return isCurrent(generation) ? .wait(0.3) : .cancelled
         } catch {
+            // Instrumentation only.
+            if case RemoteExecProbe.ProbeError.timedOut = error { tickTimedOut = true }
             guard isCurrent(generation) else { return .cancelled }
             return failed("tick: \(error.localizedDescription)")
         }
+        replyBytes = output.utf8.count
         // The reply describes the session this run was started for; a newer
         // run may already own the feed's frames and snapshot.
         guard isCurrent(generation) else { return .cancelled }
-        guard let result = adapter.parseTick(output: output, session: sessionName, nonce: nonce) else {
+        // Instrumentation only: parseTick runs synchronously on the
+        // MainActor, so this is wall-clock time stolen from the main thread.
+        let result = MuxExposeSignposts.signposter.withIntervalSignpost("parseTick", id: signpostID) {
+            adapter.parseTick(output: output, session: sessionName, nonce: nonce)
+        }
+        guard let result else {
+            // Instrumentation only.
+            tickTruncated = MuxScript.sections(of: output, nonce: nonce).truncated
             // Only the prelude's own verdict is final. Anything else (a
             // half-written reply, a momentarily unavailable server) is a
             // transient failure worth retrying, and never throws away a
@@ -1035,6 +1136,7 @@ final class MultiplexerExposeFeed {
         // Panes that vanished take their frames with them.
         let live = Set(result.snapshot.allPanes.map(\.id))
         frames = frames.filter { live.contains($0.key) }
+        markAllTilesPaintedIfNeeded(result.snapshot)
 
         let topologyChanged = result.snapshot != snapshot
         snapshot = result.snapshot
@@ -1042,6 +1144,7 @@ final class MultiplexerExposeFeed {
         state = .live
         if topologyChanged || wasLoading { onChange?() }
 
+        tickTruncated = result.truncated
         if result.truncated {
             fetchCap = max(1, min(fetchCap, max(request.fetch.count, 2)) / 2)
             cleanTicks = 0
