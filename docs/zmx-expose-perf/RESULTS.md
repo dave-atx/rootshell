@@ -158,20 +158,35 @@ code path proves it.
   `.needsImmediateFollowUp` in isolation — confirms the bootstrap-seed logic
   activates only for zmx, only when the topology is genuinely unknown, and
   never suppresses the follow-up tick tmux/zellij/herdr rely on.
-- **NOT run**: the existing whole-system XCUITest
+- **STILL NOT run** (updated 2026-09-08): the existing whole-system XCUITest
   `testDetachThenTabExposeReturnsToLocal` in
   `rootshellStandaloneUITests.swift` (attaches, opens exposé, detaches with
   Ctrl-\, reopens exposé, asserts it falls back to `local` state and the
   detached session's cell is gone) is exactly the end-to-end confirmation
   PROGRESS.md's V2 step asks for, and would be the strongest possible check
-  for this. It runs through `scripts/test-macos-ui-local.sh`, which
-  ad-hoc-signs the build (`codesign --force --sign -`) and resets
-  LaunchServices/TCC state on the host — both out of step with this
-  environment's own build policy (paid-team signing via
-  `Configuration/DeveloperSettings.xcconfig`, never ad-hoc signing or
-  entitlement stripping), so it was deliberately not run here. This is the
-  one item from the task's "what could you NOT verify" ask: **the
-  `testDetachThenTabExposeReturnsToLocal` end-to-end run is unverified by
-  this change**: the reasoning above and the mandatory local gates (all
-  green) are the evidence in hand; running it locally with the fixture
-  already up (`scripts/test-macos-ui-local.sh`) is the natural next step.
+  for this. **The signing objection no longer applies**:
+  `scripts/test-macos-ui-paid-team.sh` now runs the suite under this
+  checkout's own paid team with no ad-hoc signing, no entitlement stripping,
+  no bundle-identifier rewriting, no `lsregister` and no `tccutil reset` —
+  and it was confirmed to build, sign
+  (`org.marquard.rootshell`, `Apple Development: Dave Marquard`, team
+  `5WM6947328`, `codesign --verify --deep --strict` clean), seed the fixture,
+  patch the xctestrun and launch the runner. It then fails at runner
+  initialization because macOS developer mode is disabled on this host
+  (`DevToolsSecurity -status` → *"Developer mode is currently disabled"*;
+  XCTest reports *"The test runner failed to initialize for UI testing.
+  (Underlying Error: Authentication canceled. System authentication is
+  running.)"*). What is actually required is one interactive authentication
+  of the `system.privilege.taskport` right (currently `authenticate-user
+  true`, `group _developer`, `shared true`, `timeout 36000`), which XCTest
+  needs for `task_for_pid` on the app under test. Answering the "Developer
+  Tools Access" dialog once at the keyboard covers 10 hours and changes
+  nothing permanently; `sudo DevToolsSecurity -enable` stops the prompt for
+  good but is convenience, not a prerequisite. Either way it needs the user's
+  password and so is theirs to run, not an agent's.
+  So this remains the one item from the task's "what could you NOT verify"
+  ask: **the `testDetachThenTabExposeReturnsToLocal` end-to-end run is still
+  unverified by this change**. The reasoning above and the mandatory local
+  gates (all green, re-run after the V2 enabling changes) are the evidence in
+  hand; re-running `scripts/test-macos-ui-paid-team.sh` after developer mode
+  is enabled is the one remaining step.
