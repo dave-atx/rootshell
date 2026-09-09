@@ -286,8 +286,10 @@ enum HeadlessSSHExecutor {
             connectHost = resolved
         }
         let directChannel = try await MPTCPBootstrap.connectPlainChannel(
-            host: connectHost, port: config.port
+            host: connectHost, port: config.port,
+            deferReads: true
         )
+        MPTCPBootstrap.armReadsWhenSSHHandlerInstalled(on: directChannel)
         var settings = SSHClientSettings(
             host: connectHost,
             port: config.port,
@@ -349,8 +351,10 @@ enum HeadlessSSHExecutor {
             jumpConnectHost = jumpConfig.host
         }
         let jumpChannel = try await MPTCPBootstrap.connectPlainChannel(
-            host: jumpConnectHost, port: jumpConfig.port
+            host: jumpConnectHost, port: jumpConfig.port,
+            deferReads: true
         )
+        MPTCPBootstrap.armReadsWhenSSHHandlerInstalled(on: jumpChannel)
         var jumpSettings = SSHClientSettings(
             host: jumpConnectHost,
             port: jumpConfig.port,

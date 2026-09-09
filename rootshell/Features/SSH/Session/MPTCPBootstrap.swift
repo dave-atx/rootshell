@@ -15,6 +15,7 @@
 import Foundation
 import Network
 import NIOCore
+import NIOSSH
 import NIOTransportServices
 import os.log
 
@@ -63,13 +64,26 @@ enum MPTCPBootstrap {
     /// Happy Eyeballs v2, which is what we want — Mosh's UDP hole-puncher binds
     /// its local socket to the same address family as the SSH session, so a
     /// silent IPv6-ULA preference here would regress Mosh-over-Tailscale.
+    ///
+    /// Pass `deferReads: true` when the caller installs its pipeline handlers
+    /// *after* this returns, which is every SSH caller: see `armReadsWhenSSHHandlerInstalled`
+    /// for why that is otherwise a silent, fatal race.
     static func connectPlainChannel(
         host: String,
         port: Int,
-        timeout: TimeAmount = .seconds(30)
+        timeout: TimeAmount = .seconds(30),
+        deferReads: Bool = false
     ) async throws -> Channel {
         var bootstrap = NIOTSConnectionBootstrap(group: tsEventLoopGroup)
             .connectTimeout(timeout)
+        if deferReads {
+            // Applied before the channel is registered or connected
+            // (NIOTSConnectionBootstrap.connect applies channel options, then
+            // the initializer, then register, then connect), so `becomeActive0`'s
+            // `readIfNeeded0()` is a no-op and not one byte is read until
+            // `armReadsWhenSSHHandlerInstalled` re-enables it.
+            bootstrap = bootstrap.channelOption(ChannelOptions.autoRead, value: false)
+        }
         let mode: String
         if isEnabled {
             bootstrap = bootstrap.withMultipath(.interactive)
@@ -90,5 +104,59 @@ enum MPTCPBootstrap {
         let remote = channel.remoteAddress?.description ?? "?"
         logger.info("\(mode) connected local=\(local) remote=\(remote)")
         return channel
+    }
+
+    /// Start reading on a channel connected with `deferReads: true`, once the
+    /// SSH handlers are in its pipeline. Fire-and-forget; runs on the channel's
+    /// own event loop.
+    ///
+    /// A channel from `NIOTSConnectionBootstrap` is already active by the time
+    /// `connect` returns: `becomeActive0` succeeds the connect promise and then
+    /// calls `readIfNeeded0()`, so under the default `autoRead` the first read
+    /// is issued before the caller can install a single handler. Whatever the
+    /// server has already said is then fired down an empty pipeline and dropped
+    /// at `StateManagedNWConnectionChannel.channelRead0`, whose body is
+    /// literally "drop the data, do nothing".
+    ///
+    /// For SSH that is fatal and silent. OpenSSH sends its banner and KEXINIT
+    /// unprompted, within ~20ms on a local link, and Citadel installs
+    /// `NIOSSHHandler`/`ClientHandshakeHandler` asynchronously from inside
+    /// `SSHClient.connect(on:settings:)`. Lose that race and the banner is gone
+    /// for good — `NIOSSHHandler` builds its parser in `init`, so there is no
+    /// replay. The client then writes its own identification string, the server
+    /// has nothing left to send, and both ends wait for each other until
+    /// `loginTimeout` (300s here). Observed on loopback as an indefinite hang
+    /// with the socket ESTABLISHED, 2458 bytes received and 23 sent.
+    ///
+    /// Citadel exposes no hook for "handlers are installed", so poll the
+    /// pipeline on the event loop. Each check is a walk of a pipeline a few
+    /// entries long and costs nothing next to a network round trip. Setting
+    /// `autoRead` back to true issues the first read immediately — NIOTS's
+    /// `setOption0` calls `readIfNeeded0()` — so nothing is missed.
+    ///
+    /// If the handler never appears the reads are armed anyway at `limit`,
+    /// leaving such a caller with exactly the behaviour it had before this
+    /// option existed rather than a deterministic hang.
+    nonisolated static func armReadsWhenSSHHandlerInstalled(
+        on channel: Channel,
+        within limit: TimeAmount = .seconds(10)
+    ) {
+        let deadline = NIODeadline.now() + limit
+        channel.eventLoop.scheduleRepeatedTask(initialDelay: .zero, delay: .milliseconds(1)) { task in
+            guard channel.isActive else {
+                task.cancel()
+                return
+            }
+            let installed = (try? channel.pipeline.syncOperations.handler(type: NIOSSHHandler.self)) != nil
+            let expired = NIODeadline.now() >= deadline
+            guard installed || expired else { return }
+            task.cancel()
+            if !installed {
+                logger.error("arming reads after \(limit.nanoseconds / 1_000_000)ms without an SSH handler")
+            }
+            channel.setOption(ChannelOptions.autoRead, value: true).whenFailure { error in
+                logger.error("failed to arm reads: \(String(describing: error))")
+            }
+        }
     }
 }

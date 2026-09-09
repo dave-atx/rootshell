@@ -147,8 +147,10 @@ nonisolated final class GitSSHSubtransportContext: @unchecked Sendable {
                         jumpConnectHost = jumpConfig.host
                     }
                     let jumpChannel = try await MPTCPBootstrap.connectPlainChannel(
-                        host: jumpConnectHost, port: jumpConfig.port
+                        host: jumpConnectHost, port: jumpConfig.port,
+                        deferReads: true
                     )
+                    MPTCPBootstrap.armReadsWhenSSHHandlerInstalled(on: jumpChannel)
                     var jumpSettings = SSHClientSettings(
                         host: jumpConnectHost, port: jumpConfig.port,
                         authenticationMethod: { jumpAuth },
@@ -189,8 +191,10 @@ nonisolated final class GitSSHSubtransportContext: @unchecked Sendable {
                         connectHost = host
                     }
                     let directChannel = try await MPTCPBootstrap.connectPlainChannel(
-                        host: connectHost, port: port
+                        host: connectHost, port: port,
+                        deferReads: true
                     )
+                    MPTCPBootstrap.armReadsWhenSSHHandlerInstalled(on: directChannel)
                     var settings = SSHClientSettings(
                         host: connectHost,
                         port: port,

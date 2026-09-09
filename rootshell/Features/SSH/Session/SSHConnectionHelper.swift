@@ -382,8 +382,10 @@ enum SSHConnectionHelper {
             let jumpChannel = try await MPTCPBootstrap.connectPlainChannel(
                 host: jumpConnectHost,
                 port: jumpConfig.port,
-                timeout: tcpConnectTimeoutCap
+                timeout: tcpConnectTimeoutCap,
+                deferReads: true
             )
+            MPTCPBootstrap.armReadsWhenSSHHandlerInstalled(on: jumpChannel)
             if Task.isCancelled {
                 try? await jumpChannel.close()
                 throw CancellationError()
@@ -528,8 +530,10 @@ enum SSHConnectionHelper {
             let directChannel = try await MPTCPBootstrap.connectPlainChannel(
                 host: connectHost,
                 port: config.port,
-                timeout: tcpConnectTimeoutCap
+                timeout: tcpConnectTimeoutCap,
+                deferReads: true
             )
+            MPTCPBootstrap.armReadsWhenSSHHandlerInstalled(on: directChannel)
             if Task.isCancelled {
                 try? await directChannel.close()
                 throw CancellationError()

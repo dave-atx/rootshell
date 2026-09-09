@@ -129,8 +129,10 @@ final class AIAgentExecutor {
                     jumpConnectHost = jumpConfig.host
                 }
                 let jumpChannel = try await MPTCPBootstrap.connectPlainChannel(
-                    host: jumpConnectHost, port: jumpConfig.port
+                    host: jumpConnectHost, port: jumpConfig.port,
+                    deferReads: true
                 )
+                MPTCPBootstrap.armReadsWhenSSHHandlerInstalled(on: jumpChannel)
                 var jumpSettings = SSHClientSettings(
                     host: jumpConnectHost,
                     port: jumpConfig.port,
@@ -182,8 +184,10 @@ final class AIAgentExecutor {
                     connectHost = resolvedConfig.host
                 }
                 let directChannel = try await MPTCPBootstrap.connectPlainChannel(
-                    host: connectHost, port: resolvedConfig.port
+                    host: connectHost, port: resolvedConfig.port,
+                    deferReads: true
                 )
+                MPTCPBootstrap.armReadsWhenSSHHandlerInstalled(on: directChannel)
                 var settings = SSHClientSettings(
                     host: connectHost,
                     port: resolvedConfig.port,

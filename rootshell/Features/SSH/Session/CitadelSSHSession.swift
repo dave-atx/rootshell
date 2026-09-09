@@ -536,8 +536,10 @@ final class CitadelSSHSession: SSHTerminalSession {
             let jumpChannel = try await MPTCPBootstrap.connectPlainChannel(
                 host: jumpConnectHost,
                 port: jumpConfig.port,
-                timeout: min(timeout, Self.tcpConnectTimeoutCap)
+                timeout: min(timeout, Self.tcpConnectTimeoutCap),
+                deferReads: true
             )
+            MPTCPBootstrap.armReadsWhenSSHHandlerInstalled(on: jumpChannel)
             if Task.isCancelled {
                 try? await jumpChannel.close()
                 throw CancellationError()
@@ -720,8 +722,10 @@ final class CitadelSSHSession: SSHTerminalSession {
             let directChannel = try await MPTCPBootstrap.connectPlainChannel(
                 host: connectHost,
                 port: config.port,
-                timeout: min(timeout, Self.tcpConnectTimeoutCap)
+                timeout: min(timeout, Self.tcpConnectTimeoutCap),
+                deferReads: true
             )
+            MPTCPBootstrap.armReadsWhenSSHHandlerInstalled(on: directChannel)
             if Task.isCancelled {
                 try? await directChannel.close()
                 throw CancellationError()

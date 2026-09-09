@@ -304,8 +304,10 @@ final class MoshServerSpawner {
             // evaluation drives that setup before the first SYN.
             let jumpChannel = try await MPTCPBootstrap.connectPlainChannel(
                 host: jumpConnectHost,
-                port: jumpHost.port
+                port: jumpHost.port,
+                deferReads: true
             )
+            MPTCPBootstrap.armReadsWhenSSHHandlerInstalled(on: jumpChannel)
             var jumpSettings = SSHClientSettings(
                 host: jumpConnectHost,
                 port: jumpHost.port,
@@ -358,8 +360,10 @@ final class MoshServerSpawner {
         // Direct connection using pre-resolved IP
         let directChannel = try await MPTCPBootstrap.connectPlainChannel(
             host: resolvedHost,
-            port: port
+            port: port,
+            deferReads: true
         )
+        MPTCPBootstrap.armReadsWhenSSHHandlerInstalled(on: directChannel)
         var settings = SSHClientSettings(
             host: resolvedHost,
             port: port,

@@ -957,8 +957,10 @@ final class UDPHolePuncher {
 
             let jumpChannel = try await MPTCPBootstrap.connectPlainChannel(
                 host: jumpConnectHost,
-                port: jumpHost.port
+                port: jumpHost.port,
+                deferReads: true
             )
+            MPTCPBootstrap.armReadsWhenSSHHandlerInstalled(on: jumpChannel)
             var jumpSettings = SSHClientSettings(
                 host: jumpConnectHost,
                 port: jumpHost.port,
@@ -1002,8 +1004,10 @@ final class UDPHolePuncher {
         // Direct connection
         let directChannel = try await MPTCPBootstrap.connectPlainChannel(
             host: host,
-            port: port
+            port: port,
+            deferReads: true
         )
+        MPTCPBootstrap.armReadsWhenSSHHandlerInstalled(on: directChannel)
         var settings = SSHClientSettings(
             host: host,
             port: port,

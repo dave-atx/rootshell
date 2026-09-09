@@ -224,8 +224,10 @@ enum TrzszSpawnHelper {
 
             let jumpChannel = try await MPTCPBootstrap.connectPlainChannel(
                 host: jumpConnectHost,
-                port: jumpHost.port
+                port: jumpHost.port,
+                deferReads: true
             )
+            MPTCPBootstrap.armReadsWhenSSHHandlerInstalled(on: jumpChannel)
             var jumpSettings = SSHClientSettings(
                 host: jumpConnectHost,
                 port: jumpHost.port,
@@ -282,8 +284,10 @@ enum TrzszSpawnHelper {
         )
         let directChannel = try await MPTCPBootstrap.connectPlainChannel(
             host: resolvedHost,
-            port: sshConfig.port
+            port: sshConfig.port,
+            deferReads: true
         )
+        MPTCPBootstrap.armReadsWhenSSHHandlerInstalled(on: directChannel)
         var settings = SSHClientSettings(
             host: resolvedHost,
             port: sshConfig.port,
